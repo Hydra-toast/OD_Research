@@ -1,10 +1,11 @@
-// 개발 서버 진입점. 계정 설정이 없으면 예시 모드만 열고, 인증 API는 거절한다.
+// 개발 서버 진입점. 공개 검색은 계정·키 없이 가능하며 계정 저장은 인증 설정이 필요하다.
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { createApp } from './app.js';
 import { loadEnv, readConfig } from './env.js';
 import { createDisabledAuth, createSupabaseAuth } from './auth.js';
 import { createSupabaseProjects } from './projects.js';
+import { createLiveSearch } from '../src/providers/live.js';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -14,7 +15,8 @@ export async function start(port) {
   const config = readConfig();
   const auth = config.supabase ? createSupabaseAuth(config.supabase) : createDisabledAuth();
   const projects = config.supabase ? createSupabaseProjects(config.supabase) : { forToken() { return null; } };
-  const app = createApp({ auth, projects, config: { authEnabled: config.authEnabled }, root });
+  const search = config.searchEnabled ? createLiveSearch({ apiKey: config.openalexKey, mailto: config.mailto }) : null;
+  const app = createApp({ auth, projects, search, fulltext: { mailto: config.mailto }, config: { authEnabled: config.authEnabled, searchEnabled: config.searchEnabled }, root });
   const listenPort = port ?? config.port;
   const server = await new Promise(resolve => {
     const s = app.listen(listenPort, '127.0.0.1', () => resolve(s));

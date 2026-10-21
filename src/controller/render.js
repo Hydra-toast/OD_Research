@@ -1,6 +1,6 @@
 // DOM 반영. 뷰 함수가 만든 HTML을 꽂고 포커스를 복원한다.
 import { S } from '../state/store.js';
-import { exploreHtml } from '../views/explore.js';
+import { exploreHtml, labSection } from '../views/explore.js';
 import { prepareHtml } from '../views/prepare.js';
 import { evidenceHtml } from '../views/evidence.js';
 import { savedListHtml } from '../views/saved.js';
@@ -22,6 +22,8 @@ export function render() {
   pr.setAttribute('aria-selected', String(tab === 'prepare')); pr.tabIndex = tab === 'prepare' ? 0 : -1;
   $('#panel-explore').hidden = tab !== 'explore';
   $('#panel-prepare').hidden = tab !== 'prepare';
+  const lab = $('#lab-home');
+  if (lab) lab.innerHTML = labSection(S);
   if (tab === 'explore') $('#panel-explore').innerHTML = exploreHtml(S); else $('#panel-prepare').innerHTML = prepareHtml(S);
   renderEvidence();
   if (fk) focusFk(fk);

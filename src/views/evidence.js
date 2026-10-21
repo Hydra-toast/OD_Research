@@ -10,9 +10,9 @@ export function evidenceHtml(S) {
     const p = paperById(ev.paperId, S);
     if (!p) return null;
     return `<h3>${h(p.title)}</h3><p>${originTag(p)} ${accessTag(p)}</p>
-      <p class="meta">${p.origin === 'user' ? '사용자가 입력한 내용이에요(확인 전).' : '가상 예시 문서예요. 실제 논문이 아니에요.'}</p>
+      <p class="meta">${p.origin === 'provider' ? `${h(p.source)}에서 확보한 자료예요. 원문 링크가 있어도 본문은 아직 읽지 않았어요.` : p.origin === 'user' ? '사용자가 입력한 내용이에요(확인 전).' : '가상 예시 문서예요. 실제 논문이 아니에요.'}</p>
       ${p.abstract ? `<h4>초록</h4><blockquote>${h(p.abstract)}</blockquote>` : '<p>초록이 없어요(서지정보만 확보).</p>'}
-      <p>위치 정보 없음 — 원문이 없어서 절·그림·페이지를 제공하지 않아요.</p><p class="hint">원문 링크: 없음</p>`;
+      <p>위치 정보 없음 — 원문이 없어서 절·그림·페이지를 제공하지 않아요.</p><p class="hint">${p.link ? `<a href="${h(p.link)}" target="_blank" rel="noopener">원문 또는 공개 페이지 열기</a>` : '원문 링크: 없음'}</p>`;
   }
   const c = claimByCid(ev.claimId, S);
   if (!c) return null;

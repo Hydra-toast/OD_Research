@@ -15,10 +15,13 @@ const isObj = v => !!v && typeof v === 'object' && !Array.isArray(v);
 export function toRecord(S, scopeText) {
   return {
     id: S.projectId, name: S.name, originalInput: S.input, scope: scopeText, exclusions: S.scope.exclude,
-    queries: [S.input], dataMode: 'example', topicKey: S.topicKey, scopeState: S.scope, sort: S.sort, lab: S.lab,
+    queries: [S.input], dataMode: S.dataMode || 'example', topicKey: S.topicKey, scopeState: S.scope, sort: S.sort, lab: S.lab,
     selPapers: S.selPapers, selDirs: S.selDirs, dirSnap: S.dirSnap, notes: S.notes, cellEdits: S.cellEdits,
     claims: S.claims, questions: S.questions, versions: S.versions, revision: S.revision,
     papers: S.papers, userMeta: S.userMeta, exampleDataVersion: EXAMPLE_DATA_VERSION,
+    queryPlan: S.queryPlan, collectedAt: S.collectedAt, estimatedTotal: S.estimatedTotal, searchPage: S.searchPage, searchWarnings: S.warnings,
+    researchBrief: S.researchBrief ?? null,
+    refine: S.refine ?? { include: [], exclude: [], released: [], rounds: [] }, summaries: S.summaries ?? [], fulltext: S.fulltext ?? {}, summaryCtx: S.summaryCtx ?? null,
   };
 }
 
@@ -28,7 +31,11 @@ export function fromRecord(r) {
     projectId: r.id, name: r.name, input: r.originalInput, topicKey: r.topicKey, scope: r.scopeState, sort: r.sort ?? 'relevance',
     lab: r.lab ?? null, selPapers: r.selPapers, selDirs: r.selDirs, dirSnap: r.dirSnap, notes: r.notes, cellEdits: r.cellEdits,
     claims: r.claims, questions: r.questions, versions: r.versions, revision: r.revision ?? 0,
-    papers: r.papers, userMeta: r.userMeta ?? {}, warnings: [],
+    papers: r.papers, userMeta: r.userMeta ?? {}, warnings: [], dataMode: r.dataMode || 'example',
+    queryPlan: r.queryPlan ?? null, collectedAt: r.collectedAt ?? null, estimatedTotal: r.estimatedTotal ?? null, searchPage: r.searchPage ?? 0,
+    researchBrief: r.researchBrief ?? null,
+    refine: isObj(r.refine) ? { include: [], exclude: [], released: [], rounds: [], ...r.refine } : { include: [], exclude: [], released: [], rounds: [] },
+    summaries: Array.isArray(r.summaries) ? r.summaries : [], fulltext: isObj(r.fulltext) ? r.fulltext : {}, summaryCtx: isObj(r.summaryCtx) ? r.summaryCtx : null,
   };
 }
 
@@ -60,6 +67,7 @@ export function migrateRecord(rec) {
   if (v > SCHEMA_VERSION) return rec; // 미래 버전은 건드리지 않는다
   const r = /** @type {any} */ (structuredClone(rec));
   if (!Array.isArray(r.papers)) {
+    if (r.dataMode === 'real') return null; // 실제 조사를 예시 문헌으로 복원하지 않는다.
     const t = EXAMPLE_TOPICS[r.topicKey];
     if (!t) return null; // 주제를 알 수 없으면 복원 불가
     r.papers = structuredClone(t.papers);
@@ -104,11 +112,11 @@ function validateRecordBody(rec) {
   const r = migrateRecord(rec);
   if (!r) return { ok: false, errors: ['주제 정보를 알 수 없어 복원할 수 없음'], readOnly: false, record: rec };
   const e = [...validateProject(r)];
-  if (!TOPIC_DEFS[r.topicKey]) e.push(`알 수 없는 주제: ${r.topicKey}`);
+  if (r.dataMode !== 'real' && !TOPIC_DEFS[r.topicKey]) e.push(`알 수 없는 주제: ${r.topicKey}`);
   const papers = Array.isArray(r.papers) ? r.papers : (e.push('papers 배열 필요'), []);
   const ids = new Set();
   papers.forEach((p, i) => {
-    const pe = validatePaper(p, 'example');
+    const pe = validatePaper(p, r.dataMode);
     pe.forEach(x => e.push(`papers[${i}]: ${x}`));
     if (p?.id) { if (ids.has(p.id)) e.push(`papers[${i}]: id 중복 ${p.id}`); ids.add(p.id); }
   });

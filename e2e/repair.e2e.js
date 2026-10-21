@@ -1,4 +1,4 @@
-// P0 결손 보완 회귀: 새로고침·뒤로 가기·소재·손상 복구·근거 추가·사용자 논문·논문만 내보내기·연속 검색·대비·좁은 화면.
+﻿// P0 결손 보완 회귀: 새로고침·뒤로 가기·소재·손상 복구·근거 추가·사용자 논문·논문만 내보내기·연속 검색·대비·좁은 화면.
 import { test, expect } from '@playwright/test';
 import fs from 'node:fs';
 
@@ -41,7 +41,7 @@ test('뒤로 가기는 이전 조사와 화면으로 돌아간다', async ({ pag
   await startEuv(page);
   const a = projectOf(page.url());
   await page.locator('#brief').fill('ALD High-k');
-  await page.getByRole('button', { name: '읽을 논문 찾기' }).click();
+  await page.getByRole('button', { name: '조사 방향 정리하기' }).click();
   await expect(page.locator('.scope-list')).toContainText('ALD');
   const b = projectOf(page.url());
   expect(b).not.toBe(a);
@@ -71,7 +71,7 @@ test('손상된 근거가 있어도 다른 조사의 저장 목록은 남는다'
   await startEuv(page);
   await expect(page.locator('#save-state')).toContainText('이 브라우저에 저장됨');
   await page.evaluate(() => new Promise((res, rej) => {
-    const r = indexedDB.open('research-landscape', 1);
+    const r = indexedDB.open('research-landscape');
     r.onsuccess = () => {
       const tx = r.result.transaction('projects', 'readwrite');
       tx.objectStore('projects').put({
@@ -125,7 +125,7 @@ test('손상된 저장 데이터는 복구 화면으로 열리고 지워지지 �
   const errors = []; page.on('pageerror', e => errors.push(e.message));
   await page.goto('/');
   await page.evaluate(() => new Promise((res, rej) => {
-    const r = indexedDB.open('research-landscape', 1);
+    const r = indexedDB.open('research-landscape');
     r.onsuccess = () => { const tx = r.result.transaction('projects', 'readwrite'); tx.objectStore('projects').put({ id: 'p-corrupt1', name: '깨진 조사', originalInput: 'x', dataMode: 'example', queries: [], exclusions: [], topicKey: 'missing', claims: null }); tx.oncomplete = () => res(null); tx.onerror = () => rej(new Error('seed')); };
     r.onerror = () => rej(new Error('open'));
   }));
@@ -172,7 +172,7 @@ test('근거 추가: 후보가 없으면 이유를 알리고, 사용자 논문�
 test('논문 직접 추가: 검증, 사용자 제공 표시, HBM 5편 추가로 방향 후보 활성화', async ({ page }) => {
   await page.goto('/');
   await page.locator('#brief').fill('HBM 패키징');
-  await page.getByRole('button', { name: '읽을 논문 찾기' }).click();
+  await page.getByRole('button', { name: '조사 방향 정리하기' }).click();
   await expect(page.getByText(/방향 후보를 만들지 않았어요/)).toBeVisible();
   await page.getByRole('button', { name: '논문 직접 추가' }).click();
   await page.locator('#add-form').getByRole('button', { name: '추가', exact: true }).click();
@@ -256,9 +256,9 @@ test('연속 검색: 먼저 보낸 느린 응답이 나중에 와도 마지막 �
   await page.goto('/');
   await page.evaluate(() => { window.__rl.searchDelays = [900, 0]; });
   await page.locator('#brief').fill('EUV 포토레지스트');
-  await page.getByRole('button', { name: '읽을 논문 찾기' }).click();
+  await page.getByRole('button', { name: '조사 방향 정리하기' }).click();
   await page.locator('#brief').fill('ALD High-k');
-  await page.getByRole('button', { name: '읽을 논문 찾기' }).click();
+  await page.getByRole('button', { name: '조사 방향 정리하기' }).click();
   await expect(page.locator('.scope-list')).toContainText('ALD');
   await page.waitForTimeout(1300);
   await expect(page.locator('.scope-list')).toContainText('ALD');

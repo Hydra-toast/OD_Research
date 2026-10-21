@@ -152,7 +152,7 @@ export function cellFlags(c) {
 export function buildCompareRows(papers, meta, edits = {}) {
   return papers.map((p, i) => {
     const role = meta[p.id]?.role, tags = meta[p.id]?.tags ?? [];
-    const base = {
+    const base = p.origin === 'provider' ? Object.fromEntries(COMPARE_ITEMS.map(item => [item, { ...blank, source: 'provider', emptyReason: 'fulltext_unavailable' }])) : {
       '연구 목적': ex(`[가상 예시] ${ROLE_LABEL[role] ?? '자료'} 관점의 목적 요약`),
       '주요 접근법': ex(`[가상 예시] ${tags.join(' · ')}`),
       '재료·공정': i % 2 === 0 ? ex(`[가상 예시] ${tags[0] ?? ''}`) : empty('fulltext_unavailable'),
@@ -308,7 +308,7 @@ export function buildSummaryMd(ctx) {
     L.push(`- 미확인: ${conn.needs.length ? conn.needs.map(n => `${esc(n.name)}(${n.status})`).join(', ') : '장비·조건은 연구실 정보 입력 후 확인'}; 수치·조건은 원문 확인 필요`, '');
   }
   L.push(...claimsSection(ctx));
-  L.push('## 교수님께 확인할 질문');
+  L.push('## 나중에 확인할 질문');
   if (!ctx.questions.length) L.push('- 없음');
   for (const q of ctx.questions) L.push(`- ${esc(q)}`);
   L.push('', '## 미확인 사항');
@@ -349,7 +349,7 @@ export function buildGuideMd(ctx) {
     L.push(`- 근거 논문과 위치: ${(c?.evidence ?? []).map(e => { const p = d.papers.find(x => x.id === e.paperId); return `${esc(p?.title ?? e.paperId)}(${locText(e.location)})`; }).join(', ') || '연결된 근거 없음'}`);
     L.push(`- 설명의 한계: ${c ? claimLabels(c).join(' / ') : '미확인'}${project.dataMode === 'example' ? '; ' + EX_LABEL : ''}`, '');
   }
-  L.push(`## 슬라이드 ${n++}. 확인할 사항`, `- 핵심 문장: 아직 확인하지 못한 항목 정리`, ...(ctx.questions.length ? ctx.questions.map(q => `- 교수님께 확인: ${esc(q)}`) : ['- 교수님께 확인할 질문 없음']), '');
+  L.push(`## 슬라이드 ${n++}. 확인할 사항`, `- 핵심 문장: 아직 확인하지 못한 항목 정리`, ...(ctx.questions.length ? ctx.questions.map(q => `- 나중에 확인: ${esc(q)}`) : ['- 나중에 확인할 질문 없음']), '');
   return L.join('\n') + '\n';
 }
 

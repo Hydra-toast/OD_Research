@@ -1,14 +1,45 @@
 import { validateProject } from '../schema.js';
-import { SCHEMA_VERSION, storedEntry } from '../state/record.js';
+import { SCHEMA_VERSION, storedEntry, validateRecord } from '../state/record.js';
 import { ProviderError } from '../providers/contracts.js';
 
 export { SCHEMA_VERSION };
-const DB = 'research-landscape', STORE = 'projects';
+const DB = 'research-landscape', STORE = 'projects', FT_STORE = 'fulltexts';
+
+/** 원문 쪽별 텍스트는 프로젝트 레코드와 분리해 저장한다. 키는 projectId:paperId. */
+export async function saveFulltext(/** @type {string} */ projectId, /** @type {string} */ paperId, /** @type {any[]} */ pages) {
+  const db = await open();
+  await new Promise((res, rej) => {
+    const t = db.transaction(FT_STORE, 'readwrite');
+    t.objectStore(FT_STORE).put({ id: `${projectId}:${paperId}`, projectId, paperId, pages, at: new Date().toISOString() });
+    t.oncomplete = () => { db.close(); res(null); };
+    t.onerror = t.onabort = () => { db.close(); rej(new ProviderError('save_failed', '원문 저장 실패')); };
+  });
+}
+export async function loadFulltext(/** @type {string} */ projectId, /** @type {string} */ paperId) {
+  const db = await open();
+  return new Promise((res) => {
+    const q = db.transaction(FT_STORE, 'readonly').objectStore(FT_STORE).get(`${projectId}:${paperId}`);
+    q.onsuccess = () => { db.close(); res(q.result?.pages ?? null); };
+    q.onerror = () => { db.close(); res(null); };
+  });
+}
+export async function deleteFulltexts(/** @type {string} */ projectId) {
+  const db = await open();
+  await new Promise((res) => {
+    const t = db.transaction(FT_STORE, 'readwrite'), s = t.objectStore(FT_STORE), q = s.getAllKeys();
+    q.onsuccess = () => { for (const k of q.result) if (String(k).startsWith(projectId + ':')) s.delete(k); };
+    t.oncomplete = () => { db.close(); res(null); };
+    t.onerror = t.onabort = () => { db.close(); res(null); };
+  });
+}
 
 function open() {
   return new Promise((res, rej) => {
-    const r = indexedDB.open(DB, 1);
-    r.onupgradeneeded = () => r.result.createObjectStore(STORE, { keyPath: 'id' });
+    const r = indexedDB.open(DB, 2);
+    r.onupgradeneeded = () => {
+      if (!r.result.objectStoreNames.contains(STORE)) r.result.createObjectStore(STORE, { keyPath: 'id' });
+      if (!r.result.objectStoreNames.contains(FT_STORE)) r.result.createObjectStore(FT_STORE, { keyPath: 'id' });
+    };
     r.onsuccess = () => res(r.result);
     r.onerror = () => rej(new ProviderError('save_failed', '브라우저 저장소를 열 수 없어요'));
   });
@@ -33,7 +64,9 @@ export function createIdbRepository() {
     async save(p) {
       const errs = validateProject(p);
       if (errs.length) throw new ProviderError('save_failed', `저장할 수 없는 데이터: ${errs.join(', ')}`);
-      if (p.dataMode !== 'example') throw new ProviderError('bad_mode', 'P0 브라우저 저장은 예시 프로젝트만 지원해요');
+      if (!['example', 'real'].includes(p.dataMode)) throw new ProviderError('bad_mode', '테스트 공급자 자료는 사용자 조사로 저장하지 않아요');
+      const checked = validateRecord({ ...p, schemaVersion: SCHEMA_VERSION });
+      if (!checked.ok) throw new ProviderError('save_failed', `저장할 수 없는 데이터: ${checked.errors.join(', ')}`);
       await tx('readwrite', s => s.put({ ...p, schemaVersion: p.schemaVersion && p.schemaVersion > SCHEMA_VERSION ? p.schemaVersion : SCHEMA_VERSION, updatedAt: new Date().toISOString() }));
     },
     async list() {

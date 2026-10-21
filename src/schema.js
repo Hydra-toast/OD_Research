@@ -20,6 +20,8 @@
  * @property {SourceOrigin} origin
  * @property {string} collectedAt
  * @property {string} source
+ * @property {Record<string,string>=} fieldSources
+ * @property {Record<string,any>=} fulltext
  */
 /**
  * @typedef {Object} Project
@@ -60,8 +62,8 @@ const isStr = v => typeof v === 'string' && v.length > 0;
 const isNullableNum = v => v === null || (typeof v === 'number' && Number.isFinite(v));
 
 /**
- * ID 접두사 규칙: example:=가상 예시, fx:=고정 응답, user:=사용자 제공.
- * user:는 모든 모드에서 허용. 실제 모드는 example:·fx:를 거부한다.
+ * ID 접두사 규칙: example:=가상 예시, fx:=고정 응답, user:=사용자 제공, oa:=OpenAlex, cr:=Crossref.
+ * user:는 모든 모드에서 허용. 실제 모드는 example:·fx:를 거부한다. 예전 s2: 저장분은 지우지 않는다.
  * @param {string} id @param {DataMode} mode
  */
 export function idMatchesMode(id, mode) {

@@ -11,6 +11,10 @@ export function cancelAnalysis() { latest.next(); }
 export async function refreshAnalysis() {
   if (S.status !== 'ok') return;
   const id = latest.next();
+  if (S.dataMode === 'real') {
+    S.analysis = { status: 'partial', directions: [], count: S.papers.filter(p => !!p.abstract).length, reason: '실검색은 연결됐지만 연구 방향 자동 분석은 아직 연결되지 않았어요.', notices: ['논문 선택·초록 확인·수동 비교·메모를 사용할 수 있어요. 원문 위치와 실험 조건은 아직 추출하지 않았어요.'] };
+    render(); return;
+  }
   const input = { topicKey: S.topicKey, papers: S.papers, scope: S.scope, userMeta: S.userMeta };
   /** @type {any} */ let r;
   try { r = await analysisProvider().analyze(input); }

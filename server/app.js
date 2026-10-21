@@ -3,6 +3,9 @@ import express from 'express';
 import { HttpError, errorHandler, requestId } from './errors.js';
 import { createStatic } from './static.js';
 import { readName, readProjectWrite } from './projects.js';
+import { ProviderError } from '../src/providers/contracts.js';
+import { mountProduct } from './product.js';
+import { mountFulltext } from './fulltext.js';
 
 const AUTH_MSG = {
   unauthorized: '로그인이 필요해요.',
@@ -10,16 +13,24 @@ const AUTH_MSG = {
   auth_not_configured: '계정 연결이 설정되지 않았어요. 예시 모드만 사용할 수 있어요.',
 };
 
-/** @param {{ auth: any, projects: any, config: { authEnabled: boolean }, root: string }} deps */
+/** @param {{ auth: any, projects: any, search?: any, openai?: any, completeAi?: any, fulltext?: any, schedule?: boolean, config: { authEnabled: boolean, searchEnabled?: boolean }, root: string }} deps */
 export function createApp(deps) {
   const app = express();
   app.disable('x-powered-by');
   app.use(requestId);
   app.use(express.json({ limit: '256kb' }));
+  const product = mountProduct(app, deps);
+  mountFulltext(app, deps.fulltext || {});
+  if (deps.schedule !== false) {
+    const timer = setInterval(() => { product.jobs.recover(); product.files.purge(); }, 60 * 1000);
+    timer.unref?.();
+  }
 
   app.get('/api/config', (_req, res) => {
     res.json({
       auth: deps.config.authEnabled,
+      search: !!deps.config.searchEnabled,
+      searchProvider: 'OpenAlex',
       mode: deps.config.authEnabled ? 'account' : 'example',
       lab: '계정에 가져온 연구실 정보는 프로젝트 기록의 lab 필드에만 저장되며, 로그인한 소유자만 볼 수 있어요. 외부 AI 전송 동의와는 별개예요.',
     });
@@ -36,6 +47,29 @@ export function createApp(deps) {
   });
   app.post('/api/auth/reset', async (req, res, next) => {
     try { res.json(await deps.auth.requestReset(req.body?.email)); } catch (e) { next(e); }
+  });
+
+  app.post('/api/search', async (req, res, next) => {
+    try {
+      if (!deps.search) throw new HttpError(503, 'search_not_configured', '실제 검색이 꺼져 있어요. SEARCH_ENABLED 설정을 확인해 주세요. 예시 결과로 바꾸지 않아요.');
+      const english = String(req.body?.english || '').trim();
+      if (!english || english.length > 400) throw new HttpError(400, 'bad_input', '영문 검색어를 확인해 주세요.');
+      const page = Number.isInteger(req.body?.page) ? req.body.page : 0;
+      if (page < 0 || page > 20) throw new HttpError(400, 'bad_input', '페이지 범위가 아니에요.');
+      const user = bearer(req) ? await deps.auth.verify(bearer(req)) : { ok: false };
+      const result = await deps.search.search({
+        english, page, personal: true, userId: user.ok ? user.user.id : '',
+      });
+      res.json({ ...result, inputRevision: req.body?.inputRevision ?? null });
+    } catch (e) { next(asHttp(e)); }
+  });
+  app.post('/api/papers/resolve', async (req, res, next) => {
+    try {
+      if (!deps.search) throw new HttpError(503, 'search_not_configured', '실제 DOI 조회가 꺼져 있어요. SEARCH_ENABLED 설정을 확인해 주세요.');
+      const paper = await deps.search.resolve(String(req.body?.doi || ''));
+      if (!paper) throw new HttpError(404, 'not_found', '이 DOI를 찾지 못했어요.');
+      res.json({ paper });
+    } catch (e) { next(asHttp(e)); }
   });
 
   app.use('/api/projects', async (req, res, next) => {
@@ -96,6 +130,11 @@ export function createApp(deps) {
   return app;
 }
 
+function asHttp(/** @type {any} */ e) {
+  if (!(e instanceof ProviderError)) return e;
+  const status = e.code === 'rate_limited' ? 429 : e.code === 'not_found' ? 404 : 502;
+  return new HttpError(status, e.code, e.message, e.retryAfterSec ? { retryAfterSec: e.retryAfterSec } : {});
+}
 function bearer(/** @type {any} */ req) {
   const header = req.get('authorization') ?? '';
   return header.startsWith('Bearer ') ? header.slice(7).trim() : '';

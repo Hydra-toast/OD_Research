@@ -27,6 +27,10 @@ export function readConfig() {
   const authEnabled = !!(url && anonKey);
   return {
     authEnabled,
+    // OpenAlex 공개 검색은 키 없이 가능. 명시적인 오프라인/검사 환경에서만 끈다.
+    searchEnabled: process.env.SEARCH_ENABLED?.trim().toLowerCase() !== 'false',
+    openalexKey: process.env.OPENALEX_API_KEY?.trim() || '',
+    mailto: process.env.CROSSREF_MAILTO?.trim() || '',
     port: Number(process.env.PORT || 5173),
     supabase: authEnabled ? { url, anonKey, serviceRoleKey } : null,
   };

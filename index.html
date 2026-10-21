@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="교수님이 주신 주제, 어떤 논문부터 읽어야 할까요? 먼저 읽을 논문과 이유, 랩미팅에 필요한 근거를 정리하세요.">
+  <meta name="description" content="조사할 내용을 적고, 읽을 논문과 근거를 정리하는 개인 연구 도구입니다.">
   <meta name="theme-color" content="#F7F9F8">
   <title>Research Landscape — 읽을 논문과 랩미팅 근거 정리</title>
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23066873'/%3E%3Cpath d='M7 22h18M7 16h12M7 10h7' stroke='white' stroke-width='3' stroke-linecap='round'/%3E%3C/svg%3E">
@@ -16,7 +16,7 @@
     <div class="wrap header-in">
       <a class="brand" href="./" aria-label="Research Landscape 홈"><span class="brand-mark" aria-hidden="true">RL</span>Research Landscape</a>
       <nav aria-label="주요 메뉴">
-        <a href="#examples">사용 예시</a>
+        <a href="#demo-title">사용 예시</a>
         <a href="#saved" id="nav-saved">저장한 조사</a>
         <button type="button" id="nav-account" hidden>계정</button>
       </nav>
@@ -26,26 +26,24 @@
   <main id="main">
     <section class="hero wrap" aria-labelledby="hero-title">
       <div class="hero-copy">
-        <h1 id="hero-title">교수님이 주신 주제, 어떤 논문부터 읽어야 할까요?</h1>
-        <p class="lead">먼저 읽을 논문과 이유를 찾고, 우리 연구실과의 연결점과 랩미팅에 필요한 근거를 정리하세요.</p>
+        <h1 id="hero-title">어떤 논문부터 읽을까요?</h1>
+        <p class="lead">조사할 내용을 적고, 검색식을 고른 뒤, 읽을 논문과 근거를 한곳에 모읍니다.</p>
+        <p class="hint">개인 연구용 도구입니다.</p>
 
         <form id="brief-form" class="card input-card" novalidate>
-          <label for="brief">어떤 연구를 알아보고 있나요?</label>
-          <p class="hint" id="brief-hint">교수님이 하신 말이나 궁금한 주제를 편하게 적어주세요.</p>
-          <textarea id="brief" rows="4" maxlength="1600" aria-describedby="brief-hint brief-error" placeholder="EUV 포토레지스트에서 최근 어떤 연구가 진행되는지, 우리 랩의 기존 소재 연구와 연결할 수 있는지 알아보고 싶어요."></textarea>
+          <label for="brief">무엇을 알아보고 있나요?</label>
+          <p class="hint" id="brief-hint">주제나 메모를 그대로 붙여 넣으세요. 정리되지 않아도 됩니다.</p>
+          <textarea id="brief" rows="4" maxlength="1600" aria-describedby="brief-hint brief-error" placeholder="EUV 포토레지스트의 최근 연구와 기존 소재 연구를 어떻게 연결할 수 있는지 알아보고 싶어요."></textarea>
+          <label>전공·연구 분야 <span class="hint">(선택)</span><input id="brief-field" type="text" maxlength="200"></label>
+          <label>알고 있는 장비·재료·공정, 기간과 제약 <span class="hint">(선택, 모르면 비워 두세요)</span><input id="brief-conditions" type="text" maxlength="400"></label>
           <p class="error" id="brief-error" role="alert" hidden></p>
           <div class="row">
-            <button type="submit" class="btn primary">읽을 논문 찾기</button>
+            <button type="submit" class="btn primary">조사 방향 정리하기</button>
             <button type="button" class="btn" id="try-example">예시로 살펴보기</button>
           </div>
-          <div class="chips" id="examples" aria-label="추천 주제">
-            <span class="hint">추천 주제</span>
-            <button type="button" class="chip" data-example="euv">EUV 포토레지스트</button>
-            <button type="button" class="chip" data-example="ald">ALD / High-k</button>
-            <button type="button" class="chip" data-example="hbm">HBM (자료 부족 사례)</button>
-          </div>
-          <p class="notice">현재는 <strong>가상 예시 모드</strong>입니다. 입력은 외부로 전송되지 않고, 결과는 실제 논문 검색 결과가 아닙니다.</p>
         </form>
+        <section id="brief-plan" class="card stack" hidden></section>
+        <section id="lab-home" class="card stack lab-home" aria-labelledby="lab-h"></section>
       </div>
 
       <aside class="demo card" aria-labelledby="demo-title">
@@ -99,22 +97,14 @@
     </section>
 
     <section class="wrap section" aria-labelledby="how-title">
-      <h2 id="how-title">이렇게 도와드려요</h2>
+      <h2 id="how-title">쓰는 순서</h2>
       <div class="three">
-        <article class="card"><h3>1. 탐색</h3><p>연구 갈래와 먼저 읽을 논문을 이유와 함께 봅니다. 해석을 승인하지 않아도 바로 결과가 나옵니다.</p></article>
-        <article class="card"><h3>2. 랩미팅 준비</h3><p>선택한 논문을 같은 항목으로 비교하고, 발표 문장마다 근거와 적용 조건을 연결합니다.</p></article>
-        <article class="card"><h3>3. 내보내기</h3><p>한 페이지 요약과 외부 PPT 도구용 발표 가이드를 복사하거나 Markdown으로 받습니다.</p></article>
+        <article class="card"><h3>1. 조사 적기</h3><p>주제와 조건을 적고, 검색식을 확인한 뒤 논문을 찾습니다.</p></article>
+        <article class="card"><h3>2. 논문 고르기</h3><p>결과에서 먼저 읽을 논문을 고르고, 연구실 정보와 맞춰 봅니다.</p></article>
+        <article class="card"><h3>3. 근거 정리</h3><p>비교와 메모를 저장하고, 요약이나 발표 가이드를 Markdown으로 내보냅니다.</p></article>
       </div>
     </section>
 
-    <section class="wrap section faq" aria-labelledby="faq-title">
-      <h2 id="faq-title">자주 묻는 질문</h2>
-      <details><summary>지금 실제 논문을 검색할 수 있나요?</summary><p>아니요. 현재는 가상 예시 모드이며 실제 검색·AI 분석·계정은 연결되어 있지 않습니다. 가상 논문 제목에는 "예시"가 붙고 DOI·저자는 없습니다.</p></details>
-      <details><summary>교수님 의도를 정확히 몰라도 쓸 수 있나요?</summary><p>네. 기억나는 표현만으로 시작하고, 조사 범위는 "조정하기"에서 나중에 고칠 수 있습니다. 서비스는 의도를 단정하지 않습니다.</p></details>
-      <details><summary>초록만 있는 논문의 읽을 위치는요?</summary><p>초록만 확보한 경우 Figure·절·페이지 번호를 만들지 않고 일반적인 읽기 안내만 보여줍니다.</p></details>
-      <details><summary>사용 범위와 요금은 어떻게 되나요?</summary><p>지금은 무료 예시 체험만 있습니다. 결제나 유료 잠금은 구현되어 있지 않고, 가격과 제공량은 정해지지 않았습니다.</p></details>
-      <details><summary>PPT도 만들어주나요?</summary><p>아니요. 슬라이드별 문장·자료·출처·한계를 Markdown으로 정리해 드리고, 디자인은 익숙한 도구에서 하시면 됩니다.</p></details>
-    </section>
   </main>
 
   <div id="evidence-panel" class="evidence" role="dialog" aria-modal="false" aria-labelledby="ev-title" hidden>
@@ -122,6 +112,6 @@
     <div id="ev-body"></div>
   </div>
 
-  <footer class="wrap foot"><span>Research Landscape</span><span class="hint">가상 예시 모드 · 실제 연구 근거로 사용하지 마세요</span></footer>
+  <footer class="wrap foot"><span>Research Landscape · 개인 연구용 도구</span></footer>
 </body>
 </html>

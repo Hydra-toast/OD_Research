@@ -15,6 +15,12 @@ export const fresh = () => ({
   versions: /** @type {any[]} */ ([]), revision: 0, userMeta: /** @type {Record<string,any>} */ ({}),
   editCell: /** @type {any} */ (null), editError: '', qClaim: /** @type {string|null} */ (null), qPick: /** @type {string|null} */ (null), qMsg: '',
   evOpen: /** @type {any} */ (null), saveMsg: '', saveErr: false, exportText: /** @type {string|null} */ (null),
+  dataMode: 'example', queryPlan: /** @type {any} */ (null), cached: false, collectedAt: /** @type {string|null} */ (null),
+  estimatedTotal: /** @type {number|null} */ (null), searchPage: 0, englishOverride: '', inputRevision: 0,
+  searchError: '', forceExample: false, researchBrief: /** @type {any} */ (null), pendingReview: /** @type {any} */ (null),
+  refine: /** @type {any} */ ({ include: [], exclude: [], released: [], rounds: [] }), refineMsg: '', refineBusy: false,
+  summaries: /** @type {any[]} */ ([]), summaryDraft: '', summaryDraftIds: /** @type {string[]} */ ([]), summaryCtx: /** @type {any} */ (null), summaryPrompt: '', summaryRequest: '', summaryMsg: '',
+  fulltext: /** @type {Record<string,any>} */ ({}), fulltextMsg: '', fulltextBusy: false, uploadTarget: /** @type {string|null} */ (null),
   analysis: /** @type {any} */ (null), corrupt: /** @type {any} */ (null), readOnly: false, notFoundId: /** @type {string|null} */ (null),
 });
 

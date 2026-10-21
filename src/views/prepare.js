@@ -18,7 +18,7 @@ export function prepareHtml(S) {
   const origins = new Set(papers.map((/** @type {any} */ p) => p.origin));
   return `<div class="stack">
     <section class="card stack"><h2 tabindex="-1">조사 질문과 범위</h2><p class="orig">${h(S.input)}</p><p>${h(scopeText(S))}</p>
-      <p>${exampleTag()} <button class="btn small" data-act="goto-explore">탐색으로 돌아가기</button></p>
+      <p>${S.dataMode === 'real' ? tag('info', '실제 검색 자료 · 본문 미확보') : exampleTag()} <button class="btn small" data-act="goto-explore">탐색으로 돌아가기</button></p>
       ${origins.has('user') ? `<p class="notice">${tag('warn', ORIGIN_LABEL.user)} 선택한 논문에 사용자가 직접 넣은 자료가 있어요${origins.has('example') ? '. 가상 예시와 섞여 있으니 구분해서 봐주세요' : ''}.</p>` : ''}</section>
     <section class="card stack"><h2 style="font-size:1.25rem">선택한 방향 ${dirs.length}개</h2>${dirs.length ? `<ul>${dirs.map((/** @type {any} */ d) => `<li>${h(d.label)} — ${h(d.question)}</li>`).join('')}</ul>` : '<p>선택한 방향이 없어요. 논문만으로도 정리할 수 있고, 내보내기에도 선택한 논문과 메모가 담겨요.</p>'}</section>
     <section class="stack"><h2 style="font-size:1.25rem">논문 비교 (${papers.length}편)</h2>
@@ -26,15 +26,19 @@ export function prepareHtml(S) {
       <p class="hint">빈칸은 추정으로 채우지 않아요. 수치에는 단위·측정 조건·근거를 연결해야 하며, 초록만 확보한 자료는 위치를 제공하지 않아요. 단위나 조건이 다른 수치는 직접 비교하지 않아요.</p></section>
     <section class="stack"><h2 style="font-size:1.25rem">논문 메모</h2>${papers.map((/** @type {any} */ p) => `<label>${h(p.title)} 메모<textarea data-act="note" data-id="${p.id}" data-fk="note-${p.id}">${h(S.notes[p.id] ?? '')}</textarea></label>`).join('') || '<p class="hint">선택한 논문이 없어요.</p>'}</section>
     <section class="stack"><h2 style="font-size:1.25rem">발표할 문장과 근거</h2>
-      <p class="notice">${tag('info', 'AI 해석 안내')} AI 해석이 포함되어 있어요. 발표에 사용할 조건과 수치는 연결된 원문에서 확인하세요. <span class="hint">(이 예시에서는 실제 AI가 실행되지 않았어요.)</span></p>
+      <p class="notice">${tag('info', 'AI 해석 안내')} ${S.dataMode === 'real' ? '이 검색 결과에는 AI 분석을 실행하지 않았어요. 직접 정리한 문장과 조건은 원문에서 확인하세요.' : 'AI 해석이 포함되어 있어요. 발표에 사용할 조건과 수치는 연결된 원문에서 확인하세요. (이 예시에서는 실제 AI가 실행되지 않았어요.)'}</p>
       ${claims.map((/** @type {any} */ c) => claimCard(S, c)).join('') || '<p class="card">방향을 선택하면 발표 문장 카드가 생겨요.</p>'}</section>
     <section class="card stack"><h2 style="font-size:1.25rem">아직 확인할 사항</h2>
-      <ul>${open.map((/** @type {any} */ c) => `<li>${h(c.text)} — ${claimLabels(c).join(' / ')}</li>`).join('') || '<li>미확인 문장 없음</li>'}${S.questions.map((/** @type {string} */ q) => `<li>교수님께 확인: ${h(q)}</li>`).join('')}</ul></section>
+      <ul>${open.map((/** @type {any} */ c) => `<li>${h(c.text)} — ${claimLabels(c).join(' / ')}</li>`).join('') || '<li>미확인 문장 없음</li>'}${S.questions.map((/** @type {string} */ q) => `<li>나중에 확인: ${h(q)}</li>`).join('')}</ul></section>
     <section class="card stack"><h2 style="font-size:1.25rem">내보내기</h2>
       <p class="hint">선택한 논문·메모·수정한 값·출처·자료 범위·미확인·예시 표시가 파일에도 남아요. 실제 PPT는 만들지 않아요.</p>
       <div class="row"><button class="btn" data-act="export" data-kind="summary" data-mode="copy">한 페이지 요약 복사</button><button class="btn" data-act="export" data-kind="summary" data-mode="download">요약 Markdown 받기</button>
       <button class="btn" data-act="export" data-kind="guide" data-mode="copy">발표 가이드 복사</button><button class="btn" data-act="export" data-kind="guide" data-mode="download">가이드 Markdown 받기</button></div>
       <p id="export-status" role="status" class="hint"></p>
+      <details><summary>랩미팅 피드백으로 새 버전</summary>
+        <form data-act="feedback-save" class="stack"><label>피드백<select name="kind"><option value="no_equipment">장비 없음</option><option value="weak_link">기존 연구와 연결 약함</option><option value="compare_other">다른 소재 비교</option><option value="need_recent">최근 논문 보강</option><option value="free">자유 입력</option></select></label><button class="btn" type="submit">피드백 반영</button></form>
+        <p class="hint">선택과 메모는 지우지 않아요. ${h(S.feedbackNote || '')}</p></details>
+      <button class="btn" type="button" data-act="print">인쇄용 요약 보기</button>
       ${S.exportText ? `<label>복사용 텍스트(직접 선택해 복사하세요)<textarea class="fallback" readonly id="export-fallback">${h(S.exportText)}</textarea></label>` : ''}</section></div>`;
 }
 
@@ -86,7 +90,7 @@ function claimCard(S, c) {
     ${S.qClaim === c.id ? (q ? `<div class="q-box" role="group" aria-label="확인 질문"><p><strong>${h(q.text)}</strong></p><div class="row">
       <button class="btn small" data-act="q-act" data-kind="revise" data-id="${c.id}">주장 범위 수정</button>
       <button class="btn small" data-act="q-act" data-kind="evidence" data-id="${c.id}" data-fk="qe-${c.id}">근거 추가</button>
-      <button class="btn small" data-act="q-act" data-kind="ask" data-id="${c.id}">교수님께 확인할 질문으로 남기기</button>
+      <button class="btn small" data-act="q-act" data-kind="ask" data-id="${c.id}">나중에 확인할 질문으로 남기기</button>
       <button class="btn small" data-act="q-act" data-kind="unknown" data-id="${c.id}">모르겠어요 / 원문에서 못 찾았어요</button></div>
       ${S.qMsg ? `<p class="notice" role="status">${h(S.qMsg)}</p>` : ''}
       ${S.qPick === c.id && cands.length ? `<div role="group" aria-label="추가할 근거 고르기"><p class="hint">추가할 논문을 고르세요(초록 기준 근거, 위치 없음).</p>${cands.map((/** @type {any} */ p) => `<button class="btn small" data-act="ev-pick" data-id="${c.id}" data-pid="${h(p.id)}">${h(p.title)} ${accessTag(p)}</button>`).join(' ')}</div>` : ''}</div>`

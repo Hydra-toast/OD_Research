@@ -12,6 +12,9 @@ import { scheduleSave, doSave, cancelSave } from './persist.js';
 import { refreshAnalysis } from './analysis.js';
 import { setUrl } from './router.js';
 import { search, searchExample, openProject, goHome } from './session.js';
+import { runtime } from './runtime.js';
+import { parseReview, reviewPrompt } from '../research/import.js';
+import { deleteFulltexts } from '../repository/idb.js';
 
 const toggle = (/** @type {string[]} */ arr, /** @type {string} */ id) => (arr.includes(id) ? arr.filter(x => x !== id) : [...arr, id]);
 const pushVersion = (/** @type {string} */ label) => S.versions.push({ at: new Date().toISOString(), label, scope: scopeText(S) });
@@ -84,7 +87,7 @@ export function initEvents() {
     if (!t) return;
     const a = t.dataset.act, id = t.dataset.id;
     switch (a) {
-      case 'retry': search(S.input); break;
+      case 'retry': search(S.input, { example: S.forceExample }); break;
       case 'load-example': case 'rebuild-topic': searchExample(t.dataset.key); break;
       case 'adjust-toggle': S.adjustOpen = !S.adjustOpen; render(); $('#adjust-form input')?.focus(); break;
       case 'add-toggle': S.addOpen = !S.addOpen; S.addError = ''; render(); if (S.addOpen) focusFk('add-title'); else focusFk('add-toggle'); break;
@@ -92,6 +95,8 @@ export function initEvents() {
       case 'term-remove': S.scope[t.dataset.kind] = S.scope[t.dataset.kind].filter((/** @type {string} */ x) => x !== t.dataset.term); pushVersion('범위 조건 삭제'); touchAnalysis(); break;
       case 'branch': S.branch = id || null; render(); break;
       case 'more': S.showAll = !S.showAll; render(); break;
+      case 'print': window.print(); break;
+      case 'more-remote': S.searchPage = (S.searchPage || 0) + 1; search(S.input, { keepPage: true, english: S.englishOverride }); break;
       case 'toggle-paper': S.selPapers = toggle(S.selPapers, id); touch(); break;
       case 'toggle-dir': {
         if (S.selDirs.includes(id)) S.selDirs = S.selDirs.filter((/** @type {string} */ x) => x !== id);
@@ -105,6 +110,25 @@ export function initEvents() {
       case 'lab-example': S.lab = { ...EXAMPLE_LAB, papers: '' }; touch(); break;
       case 'lab-clear': S.lab = null; touch(); break;
       case 'view-doc': openEvidence({ paperId: id }, t.dataset.fk); break;
+      case 'unexclude': {
+        const paper = S.papers.find((/** @type {any} */ p) => p.id === id);
+        if (paper?.relevance) { paper.relevance.excluded = false; paper.relevance.reasons = ['사용자가 제외를 해제함']; }
+        S.papers.sort((a, b) => Number(!!a.relevance?.excluded) - Number(!!b.relevance?.excluded) || (b.relevance?.score || 0) - (a.relevance?.score || 0) || String(a.id).localeCompare(String(b.id)));
+        touch(); break; }
+      case 'review-copy': {
+        const chosen = S.papers.filter((/** @type {any} */ p) => !S.selPapers.length || S.selPapers.includes(p.id));
+        const text = reviewPrompt(chosen, S.researchBrief?.searchCriteria || {}, S.researchBrief?.rankVersion || 'rule-v1').join('\n\n');
+        try { await navigator.clipboard.writeText(text); } catch { S.exportText = text; }
+        render(); break; }
+      case 'review-apply': {
+        const review = S.pendingReview;
+        if (!review?.accepted?.length) break;
+        const order = { direct: 0, adjacent: 1, unclear: 2 };
+        const byId = new Map(review.accepted.map((/** @type {any} */ r) => [r.id, r]));
+        S.papers = S.papers.map((/** @type {any} */ p) => byId.has(p.id) ? { ...p, externalReview: { ...byId.get(p.id), label: review.label, model: review.model || null, at: review.at, criterionVersion: S.researchBrief?.rankVersion || null } } : p);
+        S.papers.sort((a, b) => (order[a.externalReview?.judgment] ?? 9) - (order[b.externalReview?.judgment] ?? 9) || String(a.id).localeCompare(String(b.id)));
+        S.pendingReview = null;
+        touch(); break; }
       case 'cell-edit': S.editCell = { pid: t.dataset.pid, item: t.dataset.item }; S.editError = ''; render(); focusFk('cell-input'); break;
       case 'cell-cancel': { const k = S.editCell; S.editCell = null; S.editError = ''; render(); if (k) focusFk(`ce-${k.pid}-${k.item}`); break; }
       case 'claim-ev': case 'claim-recheck': openEvidence({ claimId: id }, t.dataset.fk); break; // 자동 재검증은 하지 않는다. 사용자가 직접 확인.
@@ -128,28 +152,54 @@ export function initEvents() {
         const current = (S.projectId ?? S.corrupt?.id) === id;
         if (current) cancelSave();
         await repo.delete(id);
+        await deleteFulltexts(id).catch(() => {});
         if (current) await goHome({ url: 'replace' });
         renderSaved(); break; }
       case 'raw-export': rawExport(id); break;
     }
   });
 
-  document.addEventListener('submit', e => {
+  document.addEventListener('submit', async e => {
     const f = /** @type {any} */ (e.target)?.closest?.('form[data-act]'); if (!f) return;
     e.preventDefault();
     const fd = new FormData(f);
     switch (f.dataset.act) {
+      case 'feedback-save': {
+        S.versions.push({ at: new Date().toISOString(), label: `피드백:${fd.get('kind')}`, scope: scopeText(S) });
+        S.feedbackNote = '이전 선택과 메모는 유지했어요.';
+        touch();
+        break; }
+      case 'english-query': {
+        const english = String(fd.get('english') || '').trim();
+        if (!english) break;
+        S.englishOverride = english;
+        search(S.input, { english });
+        break; }
       case 'scope-apply':
         addTerms('exclude', fd.get('exclude')); addTerms('boost', fd.get('boost')); addTerms('emphasis', fd.get('emphasis'));
         S.scope.material = String(fd.get('material') || '').trim(); S.scope.materialOnly = fd.get('materialOnly') === 'on';
         S.scope.focus = fd.get('focus') || 'trend';
         S.adjustOpen = false; pushVersion('범위 조정'); touchAnalysis(); focusFk('adjust'); break;
       case 'lab-save': S.lab = Object.fromEntries([...fd.entries()].map(([k, v]) => [k, String(v).trim()])); S.labOpen = false; touch(); break;
+      case 'review-paste': {
+        const parsed = parseReview(String(fd.get('review') || ''), S.papers, S.researchBrief?.rankVersion || '');
+        S.pendingReview = { ...parsed, at: new Date().toISOString() };
+        render(); break; }
       case 'add-paper': {
         try {
-          const doi = String(fd.get('doi') || '').trim().toLowerCase();
-          if (doi && S.papers.some((/** @type {any} */ p) => p.doi && p.doi.toLowerCase() === doi)) throw new Error('같은 DOI의 논문이 이미 있어요.');
-          const { paper, meta: m } = makeUserPaper({ title: fd.get('title'), year: fd.get('year'), doi: fd.get('doi'), abstract: fd.get('abstract'), role: fd.get('role'), tags: fd.get('tags'), branches: fd.getAll('branches') });
+          const doi = String(fd.get('doi') || '').trim();
+          if (doi && S.papers.some((/** @type {any} */ p) => p.doi && p.doi.toLowerCase() === doi.toLowerCase())) throw new Error('같은 DOI의 논문이 이미 있어요.');
+          if (runtime.search && doi) {
+            const res = await fetch('/api/papers/resolve', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ doi }) });
+            const body = await res.json().catch(() => ({}));
+            if (res.ok && body.paper) {
+              S.papers = [...S.papers, body.paper];
+              S.addOpen = false; S.addError = ''; pushVersion('DOI로 논문 추가'); touchAnalysis(); focusFk('add-toggle');
+              break;
+            }
+            if (res.status !== 404) throw new Error(body.error?.message || 'DOI를 확인하지 못했어요. 예시 논문으로 바꾸지 않았어요.');
+          }
+          const { paper, meta: m } = makeUserPaper({ title: fd.get('title'), year: fd.get('year'), doi, abstract: fd.get('abstract'), role: fd.get('role'), tags: fd.get('tags'), branches: fd.getAll('branches') });
           S.papers = [...S.papers, paper]; S.userMeta = { ...S.userMeta, [paper.id]: m };
           S.addOpen = false; S.addError = ''; pushVersion('논문 직접 추가'); touchAnalysis(); focusFk('add-toggle');
         } catch (err) { S.addError = /** @type {any} */ (err).message; render(); focusFk('add-title'); }
