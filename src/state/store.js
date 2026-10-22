@@ -20,7 +20,9 @@ export const fresh = () => ({
   searchError: '', forceExample: false, researchBrief: /** @type {any} */ (null), pendingReview: /** @type {any} */ (null),
   refine: /** @type {any} */ ({ include: [], exclude: [], released: [], rounds: [] }), refineMsg: '', refineBusy: false,
   summaries: /** @type {any[]} */ ([]), summaryDraft: '', summaryDraftIds: /** @type {string[]} */ ([]), summaryCtx: /** @type {any} */ (null), summaryPrompt: '', summaryRequest: '', summaryMsg: '',
-  fulltext: /** @type {Record<string,any>} */ ({}), fulltextMsg: '', fulltextBusy: false, uploadTarget: /** @type {string|null} */ (null),
+  chatgptPurpose: 'review', chatgptPrompt: '', chatgptMsg: '', chatgptPending: /** @type {any} */ (null), chatgptUndo: /** @type {any} */ (null), chatgptFocusId: '', chatgptNote: '', chatgptPack: /** @type {any} */ (null), chatgptPlan: /** @type {any} */ (null),
+  aiDirections: /** @type {any[]} */ ([]), aiCompare: /** @type {any} */ (null), aiMemos: /** @type {any[]} */ ([]), reviewStaleAt: /** @type {string|null} */ (null),
+  fulltext: /** @type {Record<string,any>} */ ({}), fulltextMsg: '', fulltextBusy: false, fulltextActive: /** @type {string[]} */ ([]), selectMsg: '', uploadTarget: /** @type {string|null} */ (null),
   analysis: /** @type {any} */ (null), corrupt: /** @type {any} */ (null), readOnly: false, notFoundId: /** @type {string|null} */ (null),
 });
 

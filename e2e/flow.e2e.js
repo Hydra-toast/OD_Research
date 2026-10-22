@@ -11,19 +11,15 @@ async function startEuv(page) {
   await expect(page.getByRole('heading', { name: '이런 내용을 중심으로 찾아봤어요' })).toBeVisible();
 }
 
-test('랜딩: 문구·예시 채우기·기능 예시 전환', async ({ page }) => {
+test('랜딩: 문구를 적고 고칠 수 있다', async ({ page }) => {
   await page.goto('/');
   await expect(page.getByRole('heading', { level: 1 })).toHaveText('어떤 논문부터 읽을까요?');
   await expect(page).toHaveTitle(/Research Landscape/);
-  await expect(page.getByText('가상 예시 · 실제 논문 아님').first()).toBeVisible();
+  await expect(page.getByRole('heading', { name: '기능 예시' })).toHaveCount(0);
   await page.locator('#brief').fill('ALD 공정으로 High-k 박막을 만드는 연구를 알아보고 싶어요.');
   await expect(page.locator('#brief')).toHaveValue(/ALD/);
   await page.locator('#brief').fill('ALD 수정한 문장');
   await expect(page.locator('#brief')).toHaveValue('ALD 수정한 문장');
-  const before = await page.locator('#demo-excerpt').innerText();
-  await page.getByRole('button', { name: '한계', exact: true }).click();
-  expect(await page.locator('#demo-excerpt').innerText()).not.toBe(before);
-  await expect(page.getByRole('button', { name: '한계', exact: true })).toHaveAttribute('aria-pressed', 'true');
   await shot(page, 'landing-1280');
 });
 
@@ -54,11 +50,7 @@ test('범위 수정·갈래 필터·정렬·선택 보존', async ({ page }) => 
   await expect(page.getByText(/범위 조정으로 \d+편을 제외했어요/)).toBeVisible();
   await expect(page.locator('.sel-bar')).toContainText('선택 1편');
 
-  await page.getByRole('button', { name: /^금속산화물 레지스트/ }).click();
-  const n = await cards.count();
-  expect(n).toBeGreaterThan(0);
-  await page.getByRole('button', { name: /^전체/ }).click();
-
+  await expect(page.getByRole('heading', { name: '연구 갈래' })).toHaveCount(0);
   await page.getByLabel('정렬').selectOption('citations');
   await expect(page.getByText(/인용수가 미확인인 항목은 0이 아니라 뒤로/)).toBeVisible();
   await page.getByLabel('정렬').selectOption('recent');
@@ -69,24 +61,19 @@ test('범위 수정·갈래 필터·정렬·선택 보존', async ({ page }) => 
   expect(picked).toContain('예시 논문');
 });
 
-test('방향 카드: 연구실 미입력/입력, 장비 확인 필요, 비교', async ({ page }) => {
+test('연구실 정보를 입력하면 탐색 화면에 남는다', async ({ page }) => {
   await startEuv(page);
-  await expect(page.getByText('연구실 정보 미입력').first()).toBeVisible();
+  await expect(page.getByRole('heading', { name: '연구 방향' })).toHaveCount(0);
   await page.getByRole('button', { name: '연구실 정보 입력' }).click();
   await page.getByRole('button', { name: '예시 연구실 불러오기' }).click();
-  await expect(page.getByText(/재료 유사성:/).first()).toBeVisible();
-  await expect(page.getByText('확인 필요').first()).toBeVisible();
-  await page.getByRole('button', { name: '비교에 담기' }).nth(0).click();
-  await page.getByRole('button', { name: '비교에 담기' }).nth(0).click();
-  await expect(page.getByRole('region', { name: '방향 비교 표' })).toBeVisible();
-  await expect(page.locator('body')).not.toContainText(/적합도|유망|%/);
+  await expect(page.locator('#lab-home')).toContainText('예시 연구실');
 });
 
-test('HBM은 자료 부족으로 방향 후보 없음', async ({ page }) => {
+test('HBM 예시 논문은 목록으로 보인다', async ({ page }) => {
   await page.goto('/');
   await page.locator('#brief').fill('HBM 패키징');
   await page.getByRole('button', { name: '조사 방향 정리하기' }).click();
-  await expect(page.getByText(/방향 후보를 만들지 않았어요/)).toBeVisible();
+  await expect(page.getByRole('heading', { name: '연구 방향' })).toHaveCount(0);
   await expect(page.locator('#panel-explore article.paper')).toHaveCount(3);
 });
 
@@ -94,7 +81,6 @@ test('P0 대표 흐름: 선택→준비→Claim 수정→근거→저장→새�
   await context.grantPermissions(['clipboard-read', 'clipboard-write']);
   await startEuv(page);
   await addPaper(page);
-  await page.locator('article.dir').first().getByRole('button', { name: '준비 자료에 추가' }).click();
   await shot(page, 'explore-1280');
   await page.getByRole('button', { name: '선택한 자료로 랩미팅 준비' }).click();
   await expect(page.getByRole('heading', { name: '조사 질문과 범위' })).toBeVisible();
@@ -106,41 +92,18 @@ test('P0 대표 흐름: 선택→준비→Claim 수정→근거→저장→새�
   await page.locator('[data-fk=cell-input]').fill('직접 확인한 값');
   await page.getByRole('button', { name: '저장', exact: true }).click();
   await expect(page.getByText(/사용자 수정 1건 · 원래 값: 원문 미확보/)).toBeVisible();
-
-  // Claim: 확인 → 문장 수정 시 해제
-  await page.getByRole('button', { name: '내가 확인했어요' }).click();
-  await expect(page.locator('article.claim .labels')).toContainText('사용자 확인');
-  const ta = page.locator('article.claim textarea').first();
-  await ta.fill('수정한 발표 문장');
-  await ta.blur();
-  await expect(page.locator('article.claim .labels')).not.toContainText('사용자 확인');
-  await expect(page.locator('article.claim .labels')).toContainText('추가 확인 필요');
-
-  // 근거 패널과 포커스 복귀
-  const evBtn = page.getByRole('button', { name: '근거 보기' }).first();
-  await evBtn.click();
-  await expect(page.locator('#evidence-panel')).toBeVisible();
-  await expect(page.locator('#evidence-panel')).toContainText('위치 정보 없음');
-  await expect(page.locator('#evidence-panel')).not.toContainText(/Figure|Fig\./);
-  await page.keyboard.press('Escape');
-  await expect(page.locator('#evidence-panel')).toBeHidden();
-  await expect(page.getByRole('button', { name: '근거 보기' }).first()).toBeFocused();
-
-  // 질문 한 번에 하나
-  await page.getByRole('button', { name: '근거 함께 살펴보기' }).click();
-  await expect(page.locator('.q-box strong')).toHaveCount(1);
-  await page.getByRole('button', { name: '나중에 확인할 질문으로 남기기' }).click();
-  await expect(page.getByText(/나중에 확인:/)).toBeVisible();
+  await expect(page.getByRole('heading', { name: '연구 방향' })).toHaveCount(0);
   await shot(page, 'prepare-1280');
 
-  // 저장 → 새로고침 후 열기
+  // 저장 → 새로고침은 첫 화면. 목록에서 열기를 눌러 다시 연다.
   await expect(page.locator('#save-state')).toContainText('이 브라우저에 저장됨');
   await page.reload();
-  // 새로고침해도 같은 조사·같은 탭(랩미팅 준비)으로 복원된다.
+  await expect(page.locator('#workspace')).toBeHidden();
+  await page.locator('#saved-list').getByRole('button', { name: '열기' }).click();
+  await page.getByRole('button', { name: '선택한 자료로 랩미팅 준비' }).click();
   await expect(page.getByRole('tab', { name: /랩미팅 준비/ })).toHaveAttribute('aria-selected', 'true');
-  await expect(page.locator('#sel-count')).toHaveText('2');
-  await expect(page.locator('article.claim textarea').first()).toHaveValue('수정한 발표 문장');
-  await expect(page.getByText(/나중에 확인:/)).toBeVisible();
+  await expect(page.locator('#sel-count')).toHaveText('1');
+  await expect(page.getByText(/사용자 수정 1건 · 원래 값: 원문 미확보/)).toBeVisible();
 
   // 내보내기
   const [dl] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: '요약 Markdown 받기' }).click()]);
@@ -207,8 +170,9 @@ test.describe('모바일 375px', () => {
     await shot(page, 'landing-375');
     await page.getByRole('button', { name: '예시로 살펴보기' }).click();
     await expect(page.getByRole('heading', { name: '이런 내용을 중심으로 찾아봤어요' })).toBeVisible();
-    const ys = await page.evaluate(() => ['#scope-h', '#br-h', '#pp-h'].map(s => document.querySelector(s).getBoundingClientRect().top));
-    expect(ys[0]).toBeLessThan(ys[1]); expect(ys[1]).toBeLessThan(ys[2]);
+    const ys = await page.evaluate(() => ['#scope-h', '#pp-h'].map(s => document.querySelector(s).getBoundingClientRect().top));
+    expect(ys[0]).toBeLessThan(ys[1]);
+    await expect(page.getByRole('heading', { name: '연구 갈래' })).toHaveCount(0);
     await addPaper(page);
     await shot(page, 'explore-375');
     await page.getByRole('button', { name: '선택한 자료로 랩미팅 준비' }).click();

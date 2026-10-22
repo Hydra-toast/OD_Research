@@ -6,13 +6,29 @@ export { SCHEMA_VERSION };
 const DB = 'research-landscape', STORE = 'projects', FT_STORE = 'fulltexts';
 
 /** 원문 쪽별 텍스트는 프로젝트 레코드와 분리해 저장한다. 키는 projectId:paperId. */
-export async function saveFulltext(/** @type {string} */ projectId, /** @type {string} */ paperId, /** @type {any[]} */ pages) {
+export async function saveFulltext(/** @type {string} */ projectId, /** @type {string} */ paperId, /** @type {any[]} */ pages, /** @type {Blob|null} */ pdf = null) {
   const db = await open();
   await new Promise((res, rej) => {
     const t = db.transaction(FT_STORE, 'readwrite');
-    t.objectStore(FT_STORE).put({ id: `${projectId}:${paperId}`, projectId, paperId, pages, at: new Date().toISOString() });
+    const store = t.objectStore(FT_STORE), id = `${projectId}:${paperId}`;
+    const rows = store.getAll();
+    rows.onsuccess = () => {
+      const others = rows.result.filter(r => r.projectId === projectId && r.id !== id && r.pdf);
+      if (pdf && (pdf.size > 20 * 1024 * 1024 || others.length >= 5 || others.reduce((s, r) => s + r.pdf.size, pdf.size) > 100 * 1024 * 1024)) {
+        t.abort(); return;
+      }
+      store.put({ id, projectId, paperId, pages, pdf, at: new Date().toISOString() });
+    };
     t.oncomplete = () => { db.close(); res(null); };
     t.onerror = t.onabort = () => { db.close(); rej(new ProviderError('save_failed', '원문 저장 실패')); };
+  });
+}
+export async function loadFulltextPdf(/** @type {string} */ projectId, /** @type {string} */ paperId) {
+  const db = await open();
+  return new Promise((res, rej) => {
+    const q = db.transaction(FT_STORE, 'readonly').objectStore(FT_STORE).get(`${projectId}:${paperId}`);
+    q.onsuccess = () => { db.close(); res(q.result?.pdf ?? null); };
+    q.onerror = () => { db.close(); rej(new ProviderError('save_failed', '보관 PDF를 읽지 못했어요')); };
   });
 }
 export async function loadFulltext(/** @type {string} */ projectId, /** @type {string} */ paperId) {
@@ -73,6 +89,16 @@ export function createIdbRepository() {
       const all = await tx('readonly', s => s.getAll());
       return all.map(storedEntry);
     },
-    async delete(id) { await tx('readwrite', s => s.delete(id)); },
+    async delete(id) {
+      const db = await open();
+      await new Promise((res, rej) => {
+        const t = db.transaction([STORE, FT_STORE], 'readwrite');
+        t.objectStore(STORE).delete(id);
+        const ft = t.objectStore(FT_STORE), keys = ft.getAllKeys();
+        keys.onsuccess = () => { for (const k of keys.result) if (String(k).startsWith(id + ':')) ft.delete(k); };
+        t.oncomplete = () => { db.close(); res(null); };
+        t.onerror = t.onabort = () => { db.close(); rej(new ProviderError('save_failed', '조사와 원문을 삭제하지 못했어요')); };
+      });
+    },
   };
 }

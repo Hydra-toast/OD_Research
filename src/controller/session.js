@@ -206,11 +206,19 @@ export async function handlePopState() {
   }
 }
 
-/** 첫 진입. ?project= 복원 우선, ?topic=은 새 조사를 시작하고 주소를 ?project=로 바꾼다. */
+/** 주소의 조사 번호를 지운다. 저장 데이터는 열지 않는다. */
+function clearProjectUrl() {
+  const u = new URL(location.href);
+  if (!u.searchParams.has('project') && !u.searchParams.has('tab')) return;
+  u.searchParams.delete('project');
+  u.searchParams.delete('tab');
+  try { history.replaceState({ project: null, tab: 'explore' }, '', u); } catch { /* 파일 환경 */ }
+}
+
+/** 첫 진입. 새로고침·주소의 조사 번호로는 저장본을 열지 않는다. ?topic=만 새 예시 조사를 시작한다. */
 export async function initFromUrl() {
   const u = parseUrl();
-  if (u.project) return openProject(u.project, { tab: u.tab, url: 'replace' });
-  if (u.invalidProject) { resetState({ status: 'missing', notFoundId: '(잘못된 주소)' }); showWorkspace(); render(); return; }
+  if (u.project || u.invalidProject) { clearProjectUrl(); return; }
   if (u.topic && EXAMPLE_TOPICS[u.topic]) {
     await searchExample(u.topic, { url: 'replace' });
     if (u.tab === 'prepare' && S.status === 'ok') { S.tab = 'prepare'; setUrl('replace'); render(); }

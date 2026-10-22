@@ -1,0 +1,16 @@
+{
+  "date": "2026-10-22",
+  "doi": "10.1038/nature09492",
+  "realDownloadRequests": 1,
+  "search": "fixed bibliographic input (not a live search test)",
+  "source": "Sci-Hub",
+  "bytes": 402190,
+  "pageCount": 4,
+  "extractedCharacters": 28943,
+  "sha256": "f4e14e44a731e90b2ed5a59b71abbbfe1213746d741ade4209a4970ca4a3be33",
+  "doiVerified": true,
+  "persistedPdfBytes": 402190,
+  "promptContainsExtractedText": true,
+  "browserDownloadFailure": "canceled",
+  "transport": "direct HTTP adapter; MCP not used"
+}

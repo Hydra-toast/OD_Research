@@ -35,6 +35,8 @@ test('키 없는 실제 모드 응답은 출처·초록·선택·복원을 보�
   await panel.getByRole('button', { name: '준비 자료에 추가', exact: true }).click();
   await expect(page.locator('#save-state')).toContainText('저장됨');
   await page.reload();
+  await expect(page.locator('#workspace')).toBeHidden();
+  await page.locator('#saved-list').getByRole('button', { name: '열기' }).click();
   await expect(panel.locator('article.paper')).toHaveCount(1);
   await expect(panel).not.toContainText('가상 예시 · 실제 논문 아님');
   await expect(panel.locator('.sel-bar')).toContainText('선택 1편');

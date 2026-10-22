@@ -10,8 +10,8 @@ import { meta, scopeText, selectedPapers } from '../state/store.js';
 export function prepareHtml(S) {
   if (S.status === 'corrupt' || S.status === 'missing') return recoveryHtml(S);
   if (S.status !== 'ok') return `<div class="card stack"><h2 tabindex="-1">먼저 주제를 입력해 주세요</h2><p>탐색에서 논문이나 방향을 고르면 이곳으로 가져와요.</p><a class="btn primary" href="#brief">입력하러 가기</a></div>`;
-  if (!S.selPapers.length && !S.selDirs.length) return `<div class="card stack"><h2 tabindex="-1">선택한 자료가 없어요</h2><p>탐색 화면에서 논문이나 연구 방향의 “준비 자료에 추가”를 눌러주세요.</p><button class="btn primary" data-act="goto-explore" data-fk="back">탐색으로 돌아가기</button></div>`;
-  const papers = selectedPapers(S), dirs = S.selDirs.map((/** @type {string} */ id) => S.dirSnap[id]).filter(Boolean);
+  if (!S.selPapers.length && !S.selDirs.length) return `<div class="card stack"><h2 tabindex="-1">선택한 자료가 없어요</h2><p>탐색 화면에서 논문의 “준비 자료에 추가”를 눌러주세요.</p><button class="btn primary" data-act="goto-explore" data-fk="back">탐색으로 돌아가기</button></div>`;
+  const papers = selectedPapers(S);
   const claims = S.selDirs.map((/** @type {string} */ id) => S.claims[id]).filter(Boolean);
   const rows = buildCompareRows(papers, meta(S), S.cellEdits);
   const open = claims.filter((/** @type {any} */ c) => !c.state.userConfirmed);
@@ -20,14 +20,13 @@ export function prepareHtml(S) {
     <section class="card stack"><h2 tabindex="-1">조사 질문과 범위</h2><p class="orig">${h(S.input)}</p><p>${h(scopeText(S))}</p>
       <p>${S.dataMode === 'real' ? tag('info', '실제 검색 자료 · 본문 미확보') : exampleTag()} <button class="btn small" data-act="goto-explore">탐색으로 돌아가기</button></p>
       ${origins.has('user') ? `<p class="notice">${tag('warn', ORIGIN_LABEL.user)} 선택한 논문에 사용자가 직접 넣은 자료가 있어요${origins.has('example') ? '. 가상 예시와 섞여 있으니 구분해서 봐주세요' : ''}.</p>` : ''}</section>
-    <section class="card stack"><h2 style="font-size:1.25rem">선택한 방향 ${dirs.length}개</h2>${dirs.length ? `<ul>${dirs.map((/** @type {any} */ d) => `<li>${h(d.label)} — ${h(d.question)}</li>`).join('')}</ul>` : '<p>선택한 방향이 없어요. 논문만으로도 정리할 수 있고, 내보내기에도 선택한 논문과 메모가 담겨요.</p>'}</section>
     <section class="stack"><h2 style="font-size:1.25rem">논문 비교 (${papers.length}편)</h2>
       ${papers.length ? compareTable(S, rows) : '<p class="card">선택한 논문이 없어요.</p>'}
       <p class="hint">빈칸은 추정으로 채우지 않아요. 수치에는 단위·측정 조건·근거를 연결해야 하며, 초록만 확보한 자료는 위치를 제공하지 않아요. 단위나 조건이 다른 수치는 직접 비교하지 않아요.</p></section>
     <section class="stack"><h2 style="font-size:1.25rem">논문 메모</h2>${papers.map((/** @type {any} */ p) => `<label>${h(p.title)} 메모<textarea data-act="note" data-id="${p.id}" data-fk="note-${p.id}">${h(S.notes[p.id] ?? '')}</textarea></label>`).join('') || '<p class="hint">선택한 논문이 없어요.</p>'}</section>
     <section class="stack"><h2 style="font-size:1.25rem">발표할 문장과 근거</h2>
       <p class="notice">${tag('info', 'AI 해석 안내')} ${S.dataMode === 'real' ? '이 검색 결과에는 AI 분석을 실행하지 않았어요. 직접 정리한 문장과 조건은 원문에서 확인하세요.' : 'AI 해석이 포함되어 있어요. 발표에 사용할 조건과 수치는 연결된 원문에서 확인하세요. (이 예시에서는 실제 AI가 실행되지 않았어요.)'}</p>
-      ${claims.map((/** @type {any} */ c) => claimCard(S, c)).join('') || '<p class="card">방향을 선택하면 발표 문장 카드가 생겨요.</p>'}</section>
+      ${claims.map((/** @type {any} */ c) => claimCard(S, c)).join('') || '<p class="card">고른 논문의 비교와 메모로 정리해요.</p>'}</section>
     <section class="card stack"><h2 style="font-size:1.25rem">아직 확인할 사항</h2>
       <ul>${open.map((/** @type {any} */ c) => `<li>${h(c.text)} — ${claimLabels(c).join(' / ')}</li>`).join('') || '<li>미확인 문장 없음</li>'}${S.questions.map((/** @type {string} */ q) => `<li>나중에 확인: ${h(q)}</li>`).join('')}</ul></section>
     <section class="card stack"><h2 style="font-size:1.25rem">내보내기</h2>

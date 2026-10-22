@@ -1,4 +1,4 @@
-// 랜딩: 입력 폼, 기능 예시 전환.
+// 랜딩: 입력 폼.
 import { EXAMPLE_TOPICS } from '../data/examples.js';
 import { $ } from './render.js';
 import { search, searchExample, searchMany } from './session.js';
@@ -6,15 +6,6 @@ import { runtime } from './runtime.js';
 import { consultPrompt } from '../research/brief.js';
 import { parseConsult } from '../research/import.js';
 import { h } from '../views/common.js';
-
-const DEMO = {
-  cond: { excerpt: '…가상 발췌: <mark>노광 후 베이크 온도와 현상 시간</mark>을 바꾸며 패턴을 비교했다…', why: '같은 조건에서 비교했는지 확인해야 결과를 직접 비교할 수 있어요.', use: '“조건이 같을 때만 결과를 나란히 놓았다”는 문장의 근거로 사용' },
-  limit: { excerpt: '…가상 발췌: <mark>한 가지 기판에서만 평가했기 때문에 일반화에는 한계가 있다</mark>…', why: '저자가 밝힌 한계는 우리 연구에 적용할 때 추가로 확인할 항목이에요.', use: '“적용 범위는 추가 확인 필요”로 발표 문장에 한계를 함께 표기' },
-};
-function setDemo(/** @type {'cond'|'limit'} */ k) {
-  document.querySelectorAll('[data-demo]').forEach(b => b.setAttribute('aria-pressed', String(/** @type {HTMLElement} */ (b).dataset.demo === k)));
-  $('#demo-excerpt').innerHTML = DEMO[k].excerpt; $('#demo-why').textContent = DEMO[k].why; $('#demo-use').textContent = DEMO[k].use;
-}
 
 /** @type {any} */
 let importedBrief = null;
@@ -28,12 +19,12 @@ function showPlan() {
   const ctx = contextOf();
   const consult = consultPrompt(ctx);
   box.hidden = false;
-  box.innerHTML = `<p class="hint">입력 정리 → 검색 문구 확인 → 논문 수집 → 규칙 기반 정렬 → 결과 확인. 이 사이트는 유료 AI를 호출하지 않아요.</p>
-    <h2>개인 AI에 붙여 넣을 상담 내용</h2>
-    <p>복사 전에 내용을 고칠 수 있어요. 버튼을 눌러도 외부 서비스로 자동 전송하지 않아요. 개인 AI의 사용량 제한은 그 서비스 기준이에요.</p>
+  box.innerHTML = `<p class="hint">입력 정리 → ChatGPT 상담 → 검색 문구 확인 → 논문 수집 → 규칙 기반 정렬 → 결과 확인. 이 사이트는 ChatGPT를 호출하지 않아요.</p>
+    <h2>내 ChatGPT에 붙여 넣을 상담 내용</h2>
+    <p>복사한 글을 본인 ChatGPT 대화에 직접 붙여 넣으세요. 이 버튼은 ChatGPT로 전송하지 않아요. 사용량 제한은 ChatGPT 계정 기준이에요.</p>
     <textarea data-consult-prompt rows="12">${h(consult)}</textarea>
     <div class="row">
-      <button type="button" class="btn primary" data-brief="copy">내 AI에서 상담할 프롬프트 복사</button>
+      <button type="button" class="btn primary" data-brief="copy">ChatGPT 상담 프롬프트 복사</button>
       <button type="button" class="btn" data-brief="paste">상담 결과 붙여넣기</button>
       <button type="button" class="btn" data-brief="manual">직접 검색 문구 작성</button>
       <button type="button" class="btn" data-brief="broad">현재 내용으로 넓게 탐색하기</button>
@@ -49,7 +40,7 @@ function setFormStatus(/** @type {HTMLFormElement} */ form, /** @type {string} *
     slot = form.querySelector('[data-brief-status]');
   }
   if (!slot) return;
-  slot.innerHTML = `<p class="error" role="alert">${h(message)}</p>${repair ? `<label>개인 AI에 전달할 보완 요청<textarea data-repair-prompt rows="8" readonly>${h(repair)}</textarea></label><button type="button" class="btn" data-brief="repair-copy">보완 요청 복사</button>` : ''}`;
+  slot.innerHTML = `<p class="error" role="alert">${h(message)}</p>${repair ? `<label>ChatGPT에 다시 붙일 보완 요청<textarea data-repair-prompt rows="8" readonly>${h(repair)}</textarea></label><button type="button" class="btn" data-brief="repair-copy">보완 요청 복사</button>` : ''}`;
 }
 
 function queryEditor(/** @type {any} */ brief) {
@@ -61,10 +52,9 @@ function queryEditor(/** @type {any} */ brief) {
 
 export function initLanding() {
   document.addEventListener('click', e => {
-    const t = /** @type {any} */ (e.target)?.closest?.('[data-example],[data-demo]');
+    const t = /** @type {any} */ (e.target)?.closest?.('[data-example]');
     if (!t) return;
-    if (t.dataset.example) { $('#brief').value = EXAMPLE_TOPICS[t.dataset.example].input; $('#brief-error').hidden = true; $('#brief').focus(); }
-    else if (t.dataset.demo) setDemo(t.dataset.demo);
+    $('#brief').value = EXAMPLE_TOPICS[t.dataset.example].input; $('#brief-error').hidden = true; $('#brief').focus();
   });
   $('#brief-form').addEventListener('submit', (/** @type {Event} */ e) => {
     e.preventDefault();
@@ -126,5 +116,4 @@ export function initLanding() {
     }
   });
   $('#try-example').addEventListener('click', () => { $('#brief-error').hidden = true; searchExample('euv'); });
-  setDemo('cond');
 }

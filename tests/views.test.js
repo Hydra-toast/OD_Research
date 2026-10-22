@@ -23,10 +23,11 @@ describe('탐색 뷰', () => {
     expect(html).toContain('일치하는 논문이 수집한 자료에 없어요');
     expect(html).toContain('data-act="rebuild-topic" data-key="hbm"');
   });
-  it('방향 카드에 대표/최근/읽을 이유/관찰/재료·공정 분리 필드', () => {
-    S.lab = { materials: '금속산화물', processes: '현상', equipment: '', measures: '' };
+  it('탐색 화면에는 연구 갈래와 연구 방향을 그리지 않는다', () => {
     const html = exploreHtml(S);
-    for (const t of ['대표 논문', '최근 변화·한계를 다룬 논문', '다음에 읽을 논문', '수집 자료에서 관찰된 내용', '재료 유사성', '공정 유사성', '실험 가능성']) expect(html).toContain(t);
+    expect(html).not.toContain('연구 갈래');
+    expect(html).not.toContain('연구 방향');
+    expect(html).not.toContain('기능 예시');
   });
   it('방향 비교는 표와 모바일 카드를 모두 만든다', () => {
     S.compare = S.analysis.directions.slice(0, 2).map(d => d.id);

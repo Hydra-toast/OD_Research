@@ -27,7 +27,7 @@
     <section class="hero wrap" aria-labelledby="hero-title">
       <div class="hero-copy">
         <h1 id="hero-title">어떤 논문부터 읽을까요?</h1>
-        <p class="lead">조사할 내용을 적고, 검색식을 고른 뒤, 읽을 논문과 근거를 한곳에 모읍니다.</p>
+        <p class="lead">조사할 내용을 적고, 내 ChatGPT에 붙여 넣을 상담을 만든 뒤, 검색 문구와 읽을 논문을 한곳에 모읍니다. 이 사이트는 ChatGPT를 호출하지 않습니다.</p>
         <p class="hint">개인 연구용 도구입니다.</p>
 
         <form id="brief-form" class="card input-card" novalidate>
@@ -45,20 +45,6 @@
         <section id="brief-plan" class="card stack" hidden></section>
         <section id="lab-home" class="card stack lab-home" aria-labelledby="lab-h"></section>
       </div>
-
-      <aside class="demo card" aria-labelledby="demo-title">
-        <div class="demo-head"><h2 id="demo-title">기능 예시</h2><span class="tag example">가상 예시 · 실제 논문 아님</span></div>
-        <h3 class="paper-title">예시 논문 A (EUV)</h3>
-        <div class="seg" role="group" aria-label="읽을 부분 선택">
-          <button type="button" class="seg-btn" data-demo="cond" aria-pressed="true">실험 조건</button>
-          <button type="button" class="seg-btn" data-demo="limit" aria-pressed="false">한계</button>
-        </div>
-        <div class="demo-grid" aria-live="polite">
-          <div><h4>읽을 부분</h4><p id="demo-excerpt"></p></div>
-          <div><h4>읽는 이유</h4><p id="demo-why"></p></div>
-          <div><h4>랩미팅에서 활용할 내용</h4><p id="demo-use"></p></div>
-        </div>
-      </aside>
     </section>
 
     <section id="workspace" class="wrap workspace" aria-label="작업 공간" hidden>
@@ -75,7 +61,7 @@
 
     <section id="saved" class="wrap section" aria-labelledby="saved-title">
       <h2 id="saved-title">저장한 조사</h2>
-      <p class="hint">이 브라우저에만 저장됩니다. 계정이나 클라우드 동기화는 연결되어 있지 않습니다.</p>
+      <p class="hint">이 브라우저에만 저장됩니다. 새로고침하면 작업 화면은 비워지고, 저장한 조사는 아래 목록에서 열기를 눌러 불러옵니다.</p>
       <div id="saved-list"></div>
       <div id="cloud-saved" hidden></div>
       <div id="account-dialog" class="card stack" hidden>
@@ -99,7 +85,7 @@
     <section class="wrap section" aria-labelledby="how-title">
       <h2 id="how-title">쓰는 순서</h2>
       <div class="three">
-        <article class="card"><h3>1. 조사 적기</h3><p>주제와 조건을 적고, 검색식을 확인한 뒤 논문을 찾습니다.</p></article>
+        <article class="card"><h3>1. 조사 적기</h3><p>주제와 조건을 적습니다. 검색 문구가 필요하면 ChatGPT용 상담 내용을 복사해 본인 대화에 붙여 넣습니다.</p></article>
         <article class="card"><h3>2. 논문 고르기</h3><p>결과에서 먼저 읽을 논문을 고르고, 연구실 정보와 맞춰 봅니다.</p></article>
         <article class="card"><h3>3. 근거 정리</h3><p>비교와 메모를 저장하고, 요약이나 발표 가이드를 Markdown으로 내보냅니다.</p></article>
       </div>

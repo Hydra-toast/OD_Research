@@ -73,4 +73,4 @@ SEARCH_ENABLED=true
 
 
 ## 보완 후 상태
-새로고침·뒤로 가기 복원(`?project=`), 손상 데이터 복구 화면, 소재 반영, 논문 직접 추가, 구조화 비교 셀을 지원한다. 설치된 Chrome으로 e2e: `$env:PW_CHANNEL="chrome"; npm run e2e`.
+저장한 조사는 목록의 열기로 불러온다. 새로고침은 작업 화면을 비운다. 뒤로 가기(`?project=`), 손상 데이터 복구 화면, 소재 반영, 논문 직접 추가, 구조화 비교 셀을 지원한다. 설치된 Chrome으로 e2e: `$env:PW_CHANNEL="chrome"; npm run e2e`.

@@ -22,6 +22,7 @@ export function toRecord(S, scopeText) {
     queryPlan: S.queryPlan, collectedAt: S.collectedAt, estimatedTotal: S.estimatedTotal, searchPage: S.searchPage, searchWarnings: S.warnings,
     researchBrief: S.researchBrief ?? null,
     refine: S.refine ?? { include: [], exclude: [], released: [], rounds: [] }, summaries: S.summaries ?? [], fulltext: S.fulltext ?? {}, summaryCtx: S.summaryCtx ?? null,
+    aiDirections: S.aiDirections ?? [], aiCompare: S.aiCompare ?? null, aiMemos: S.aiMemos ?? [], chatgptPlan: S.chatgptPlan ?? null, chatgptNote: S.chatgptNote ?? '', reviewStaleAt: S.reviewStaleAt ?? null,
   };
 }
 
@@ -36,6 +37,7 @@ export function fromRecord(r) {
     researchBrief: r.researchBrief ?? null,
     refine: isObj(r.refine) ? { include: [], exclude: [], released: [], rounds: [], ...r.refine } : { include: [], exclude: [], released: [], rounds: [] },
     summaries: Array.isArray(r.summaries) ? r.summaries : [], fulltext: isObj(r.fulltext) ? r.fulltext : {}, summaryCtx: isObj(r.summaryCtx) ? r.summaryCtx : null,
+    aiDirections: Array.isArray(r.aiDirections) ? r.aiDirections : [], aiCompare: isObj(r.aiCompare) ? r.aiCompare : null, aiMemos: Array.isArray(r.aiMemos) ? r.aiMemos : [], chatgptPlan: isObj(r.chatgptPlan) ? r.chatgptPlan : null, chatgptNote: typeof r.chatgptNote === 'string' ? r.chatgptNote : '', reviewStaleAt: typeof r.reviewStaleAt === 'string' ? r.reviewStaleAt : null,
   };
 }
 
