@@ -23,7 +23,7 @@ export const fresh = () => ({
   summaries: /** @type {any[]} */ ([]), summaryDraft: '', summaryDraftIds: /** @type {string[]} */ ([]), summaryCtx: /** @type {any} */ (null), summaryPrompt: '', summaryMode: 'attachments', summaryRequest: '', summaryMsg: '',
   chatgptPurpose: 'review', chatgptPrompt: '', chatgptMsg: '', chatgptPending: /** @type {any} */ (null), chatgptUndo: /** @type {any} */ (null), chatgptFocusId: '', chatgptNote: '', chatgptPack: /** @type {any} */ (null), chatgptPlan: /** @type {any} */ (null),
   aiDirections: /** @type {any[]} */ ([]), aiCompare: /** @type {any} */ (null), aiMemos: /** @type {any[]} */ ([]), reviewStaleAt: /** @type {string|null} */ (null),
-  fulltext: /** @type {Record<string,any>} */ ({}), fulltextMsg: '', fulltextBusy: false, fulltextActive: /** @type {string[]} */ ([]), fulltextProgress: /** @type {any} */ (null), selectMsg: '', uploadTarget: /** @type {string|null} */ (null),
+  fulltext: /** @type {Record<string,any>} */ ({}), pdfFolder: '', fulltextMsg: '', fulltextBusy: false, fulltextActive: /** @type {string[]} */ ([]), fulltextProgress: /** @type {any} */ (null), selectMsg: '', uploadTarget: /** @type {string|null} */ (null),
   inbox: /** @type {any} */ (null),
   analysis: /** @type {any} */ (null), corrupt: /** @type {any} */ (null), readOnly: false, notFoundId: /** @type {string|null} */ (null),
 });

@@ -2,7 +2,6 @@
 import { S } from '../state/store.js';
 import { createLatest } from '../logic.js';
 import { analysisProvider } from './deps.js';
-import { render } from './render.js';
 
 const latest = createLatest();
 
@@ -13,7 +12,7 @@ export async function refreshAnalysis() {
   const id = latest.next();
   if (S.dataMode === 'real') {
     S.analysis = { status: 'partial', directions: [], count: S.papers.filter(p => !!p.abstract).length, reason: '실검색은 연결됐지만 연구 방향 자동 분석은 아직 연결되지 않았어요.', notices: ['논문 선택·초록 확인·수동 비교·메모를 사용할 수 있어요. 원문 위치와 실험 조건은 아직 추출하지 않았어요.'] };
-    render(); return;
+    return;
   }
   const input = { topicKey: S.topicKey, papers: S.papers, scope: S.scope, userMeta: S.userMeta };
   /** @type {any} */ let r;
@@ -22,5 +21,4 @@ export async function refreshAnalysis() {
   if (!latest.isLatest(id) || S.status !== 'ok') return;
   if (r.status === 'failed') r = { ...r, directions: S.analysis?.directions ?? [], count: S.analysis?.count ?? 0, reason: S.analysis?.reason ?? '' };
   S.analysis = r;
-  render();
 }

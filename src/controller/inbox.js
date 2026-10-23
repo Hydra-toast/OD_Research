@@ -57,7 +57,7 @@ async function link(/** @type {any} */ item, /** @type {string} */ paperId, /** 
 }
 
 async function pull() {
-  if (applying || S.status !== 'ok') return;
+  if (document.hidden || applying || S.status !== 'ok') return;
   const res = await fetch('/api/pdf-inbox');
   if (!res.ok) {
     if (!S.inbox?.offline) { S.inbox = { enabled: false, dir: '', pending: 0, items: [], offline: true }; render(); }
@@ -83,6 +83,7 @@ async function pull() {
 
 export function initInbox() {
   setInterval(() => { void pull().catch(() => {}); }, 2000);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) void pull().catch(() => {}); });
   document.addEventListener('click', async (e) => {
     const t = /** @type {any} */ (e.target)?.closest?.('[data-ract]');
     if (!t) return;

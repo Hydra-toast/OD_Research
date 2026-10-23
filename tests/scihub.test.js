@@ -105,6 +105,25 @@ describe('Sci-Hub adapter and HTTP boundary', () => {
       expect((await readFile(join(dir, 'p-test1', '10.9999_fixture.pdf'))).subarray(0, 5).toString()).toBe('%PDF-');
     } finally { await rm(dir, { recursive: true, force: true }); }
   });
+  it('폴더 이름은 날짜-주제이고 같은 이름이 있으면 번호만 붙인다', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'rl-pdf-'));
+    try {
+      const api = await start(async () => new Response(PDF), { pdfDir: dir });
+      const postFolder = (/** @type {any} */ body) => fetch(api.base + '/api/fulltext/folder', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }).then(r => r.json());
+      const made = await postFolder({ projectId: 'p-test1', folder: '1023-가상계측' });
+      expect(made.folderName).toBe('1023-가상계측');
+      expect(made.folder).toBe('data/inbox-pdfs/1023-가상계측');
+      const again = await postFolder({ projectId: 'p-test2', folder: '1023-가상계측' });
+      expect(again.folderName).toBe('1023-가상계측-2');
+      const reuse = await postFolder({ projectId: 'p-test1', folder: '1023-가상계측', reuse: true });
+      expect(reuse.folderName).toBe('1023-가상계측');
+      const escaped = await fetch(api.base + '/api/fulltext/folder', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ folder: '../비밀' }) });
+      expect(escaped.status).toBe(400);
+      const body = await (await api.post({ doi: DOI, projectId: 'p-test1', folder: '1023-가상계측' })).json();
+      expect(body.localFile).toBe('1023-가상계측/10.9999_fixture.pdf');
+      expect((await readFile(join(dir, '1023-가상계측', '10.9999_fixture.pdf'))).subarray(0, 5).toString()).toBe('%PDF-');
+    } finally { await rm(dir, { recursive: true, force: true }); }
+  });
   it('받은 PDF를 지정한 로컬 폴더에 파일로 남긴다', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'rl-pdf-'));
     try {

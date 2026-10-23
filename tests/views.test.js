@@ -6,7 +6,6 @@ import { exploreHtml } from '../src/views/explore.js';
 import { prepareHtml } from '../src/views/prepare.js';
 import { recoveryHtml, savedListHtml } from '../src/views/saved.js';
 import { evidenceHtml } from '../src/views/evidence.js';
-import { directionsHtml } from '../src/views/directions.js';
 
 const euv = EXAMPLE_TOPICS.euv.papers;
 const base = () => resetState({ status: 'ok', topicKey: 'euv', papers: euv, input: 'EUV <img src=x onerror=alert(1)>', projectId: 'p-test', warnings: ['x'] });
@@ -29,21 +28,6 @@ describe('탐색 뷰', () => {
     expect(html).not.toContain('연구 방향');
     expect(html).not.toContain('기능 예시');
   });
-  it('방향 비교는 표와 모바일 카드를 모두 만든다', () => {
-    S.compare = S.analysis.directions.slice(0, 2).map(d => d.id);
-    const html = directionsHtml(S);
-    expect(html).toContain('cmp-table'); expect(html).toContain('cmp-cards');
-  });
-  it('부분 결과·실패 안내', () => {
-    S.analysis = { ...S.analysis, status: 'partial', notices: ['일부만'] };
-    expect(directionsHtml(S)).toContain('부분 결과');
-    S.analysis = { ...S.analysis, status: 'failed', error: '분석 실패' };
-    expect(directionsHtml(S)).toContain('분석 실패');
-  });
-  it('방향이 없으면 사유를 보여준다', () => {
-    S.analysis = { status: 'ok', directions: [], count: 3, reason: '3편이라 만들지 않았어요', notices: [] };
-    expect(directionsHtml(S)).toContain('3편이라 만들지 않았어요');
-  });
   it('사용자 논문 카드는 사용자 제공 자료·확인 전 표시, 가상 라벨 아님', () => {
     const u = makeUserPaper({ title: '내 논문', abstract: '초록' });
     S.papers = [...euv, u.paper]; S.userMeta = { [u.paper.id]: u.meta }; S.showAll = true;
@@ -62,6 +46,8 @@ describe('탐색 뷰', () => {
     const html = exploreHtml(S);
     expect(html.match(/<article/g)).toHaveLength(30);
     expect(html).toContain('30편 원문 모두 받기');
+    expect(html).toContain('PDF 폴더 · data/inbox-pdfs/');
+    expect(html).toContain('날짜와 주제 앞부분');
     expect(html).toContain('paper-row');
     expect(html).not.toContain('추가 결과 펼치기');
     S.fulltextBusy = true;

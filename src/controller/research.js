@@ -2,6 +2,7 @@
 import { S, paperById, scopeText } from '../state/store.js';
 import { $, render } from './render.js';
 import { scheduleSave } from './persist.js';
+import { pdfFolderName, safePdfFolder, savedPdfFolder } from '../research/pdf-folder.js';
 import { refineSearch } from './session.js';
 import { applyRefine, splitTerms, yearOrNull } from '../research/refine.js';
 import { autoSelectListed, listedItems } from '../research/list.js';
@@ -76,14 +77,26 @@ async function storeResult(/** @type {any} */ paper, /** @type {any} */ r) {
   S.fulltext[paper.id] = entry;
 }
 
+function downloadFields() {
+  const folder = savedPdfFolder(S);
+  return folder ? { projectId: S.projectId, folder } : { projectId: S.projectId };
+}
+
 async function ensureDownloadFolder() {
   if (!S.projectId) return;
-  await fetch('/api/fulltext/folder', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ projectId: S.projectId }) }).catch(() => {});
+  const known = savedPdfFolder(S);
+  const folder = known || pdfFolderName(S.input || S.name || '');
+  try {
+    const res = await fetch('/api/fulltext/folder', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ projectId: S.projectId, folder, reuse: !!known }) });
+    const body = await res.json().catch(() => ({}));
+    const name = safePdfFolder(body.folderName);
+    if (res.ok && name && name !== S.pdfFolder) { S.pdfFolder = name; scheduleSave(); }
+  } catch { /* 폴더를 못 만들어도 받기는 이어 간다 */ }
 }
 
 async function requestOpen(/** @type {any} */ paper, /** @type {AbortSignal} */ signal) {
   const projectId = S.projectId;
-  const res = await fetch('/api/fulltext/fetch', { method: 'POST', signal, headers: { 'content-type': 'application/json' }, body: JSON.stringify({ doi: paper.doi || '', urls: candidateUrls(paper), license: paper.fulltext?.license || null, projectId }) });
+  const res = await fetch('/api/fulltext/fetch', { method: 'POST', signal, headers: { 'content-type': 'application/json' }, body: JSON.stringify({ doi: paper.doi || '', urls: candidateUrls(paper), license: paper.fulltext?.license || null, ...downloadFields() }) });
   if (signal.aborted || S.projectId !== projectId) return 'aborted';
   const body = await res.json().catch(() => ({}));
   await storeResult(paper, res.ok ? body : { status: 'failed' });
@@ -92,7 +105,7 @@ async function requestOpen(/** @type {any} */ paper, /** @type {AbortSignal} */ 
 
 async function requestScihub(/** @type {any} */ paper, /** @type {AbortSignal} */ signal) {
   const projectId = S.projectId;
-  const res = await fetch('/api/fulltext/scihub', { method: 'POST', signal, headers: { 'content-type': 'application/json' }, body: JSON.stringify({ doi: paper.doi, projectId }) });
+  const res = await fetch('/api/fulltext/scihub', { method: 'POST', signal, headers: { 'content-type': 'application/json' }, body: JSON.stringify({ doi: paper.doi, ...downloadFields() }) });
   if (signal.aborted || S.projectId !== projectId) return 'aborted';
   const r = await res.json().catch(() => ({ status: 'failed' }));
   const status = r.status || 'failed';
@@ -162,7 +175,7 @@ async function fetchScihub(paper) {
   S.fulltextMsg = 'Sci-Hub에서 선택한 논문 1편을 확인하고 있어요.'; render();
   try {
     await ensureDownloadFolder();
-    const res = await fetch('/api/fulltext/scihub', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ doi: paper.doi, projectId }) });
+    const res = await fetch('/api/fulltext/scihub', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ doi: paper.doi, ...downloadFields() }) });
     const r = await res.json();
     if (S.projectId !== projectId) return;
     const status = r.status || 'failed';

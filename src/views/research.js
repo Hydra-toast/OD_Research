@@ -3,6 +3,7 @@ import { h } from './common.js';
 import { suggestKeywords } from '../research/keywords.js';
 import { applyRefine } from '../research/refine.js';
 import { listedItems, LIST_CAP } from '../research/list.js';
+import { pdfFolderName, savedPdfFolder } from '../research/pdf-folder.js';
 import { summaryPrompt } from '../research/summary.js';
 import { PURPOSES } from '../research/handoff.js';
 
@@ -98,12 +99,14 @@ export function bulkBar(S) {
   const busy = !!S.fulltextBusy;
   const done = p?.done || 0;
   const total = p?.total || n || 1;
+  const folder = savedPdfFolder(S) || pdfFolderName(S.input || S.name || '');
   return `<section class="card stack" aria-labelledby="bulk-h"><h2 id="bulk-h" style="font-size:1.25rem">3. 원문 받기</h2>
     <div class="row"><button class="btn primary" type="button" data-ract="ft-bulk" ${n || busy ? '' : 'disabled'}>${busy ? '받기 취소' : `${n}편 원문 모두 받기`}</button>
     ${busy ? '<span class="spin" role="status" aria-label="받는 중"></span>' : ''}</div>
     ${busy ? `<progress value="${done}" max="${total}"></progress>` : ''}
     <p role="status">${busy ? '받는 중 ' : ''}${p ? `${done}/${total} · 확보 ${got} · 실패 ${p.fail || 0}` : ''}${S.fulltextMsg ? ` ${h(S.fulltextMsg)}` : ''}</p>
-    <details><summary>안내</summary><p class="hint">공개 원문을 먼저 받고, 실패한 논문만 Sci-Hub로 한 편씩 이어서 받습니다. 받은 PDF는 이 조사 전용 폴더 data/inbox-pdfs/조사번호 아래에 저장됩니다. 폴더는 원문 받기를 누를 때 만들어집니다. 조사 백업에는 PDF가 들어가지 않습니다.</p></details>
+    <p class="meta">PDF 폴더 · data/inbox-pdfs/${h(folder)}</p>
+    <details><summary>안내</summary><p class="hint">폴더 이름은 날짜와 주제 앞부분입니다. 받기를 누를 때 만들어집니다. 공개 원문을 먼저 받고, 없으면 Sci-Hub로 이어서 받습니다.</p></details>
   </section>`;
 }
 

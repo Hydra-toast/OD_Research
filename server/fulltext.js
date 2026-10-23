@@ -9,6 +9,7 @@ import { lookup as dnsLookup } from 'node:dns/promises';
 import { isIP } from 'node:net';
 import { HttpError } from './errors.js';
 import { blockedUrl, inspectPdf, LIMITS } from '../src/pdf/policy.js';
+import { safePdfFolder } from '../src/research/pdf-folder.js';
 import { fetchScihubPdf, normalizeDoi } from './scihub.js';
 
 const TIMEOUT_MS = 20000;
@@ -95,20 +96,39 @@ export function mountFulltext(app, deps = {}) {
     return /^[A-Za-z0-9-]{4,40}$/.test(id) ? id : null;
   }
 
-  /** 조사 폴더. projectId가 있으면 inbox-pdfs 아래에 둔다. @param {any} projectId */
-  async function projectDir(projectId) {
+  /** 조사 폴더. 이름이 있으면 그 폴더, 없으면 수신 폴더 바로 아래. @param {string|null} label */
+  async function projectDir(label) {
     if (!deps.pdfDir) return null;
     const root = resolve(deps.pdfDir);
-    const id = safeProjectId(projectId);
-    const dir = id ? resolve(root, id) : root;
+    const dir = label ? resolve(root, label) : root;
     if (dir !== root && !dir.startsWith(root + sep)) return null;
     await mkdir(dir, { recursive: true });
-    return { dir, id };
+    return { dir, id: label };
   }
 
-  /** 받은 PDF를 조사별 폴더에 쓴다. 정적 공개 경로가 아니다. @param {Buffer} bytes @param {string} doi @param {string} sha256 @param {any} projectId */
-  async function writeLocalPdf(bytes, doi, sha256, projectId) {
-    const place = await projectDir(projectId);
+  /** 같은 이름이 있으면 -2부터 붙인다. @param {string} name */
+  async function allocateFolder(name) {
+    if (!deps.pdfDir) return null;
+    const root = resolve(deps.pdfDir);
+    for (let n = 0; n < 9; n++) {
+      const candidate = n === 0 ? name : `${name}-${n + 1}`;
+      if (!safePdfFolder(candidate)) return null;
+      const dir = resolve(root, candidate);
+      if (!dir.startsWith(root + sep)) return null;
+      try { await mkdir(dir); return candidate; }
+      catch (e) { if (/** @type {any} */ (e)?.code !== 'EEXIST') throw e; }
+    }
+    return null;
+  }
+
+  /** @param {any} body */
+  function downloadLabel(body) {
+    return safePdfFolder(body?.folder) || safeProjectId(body?.projectId);
+  }
+
+  /** 받은 PDF를 조사별 폴더에 쓴다. 정적 공개 경로가 아니다. @param {Buffer} bytes @param {string} doi @param {string} sha256 @param {string|null} label */
+  async function writeLocalPdf(bytes, doi, sha256, label) {
+    const place = await projectDir(label || null);
     if (!place) return null;
     const name = pdfFileName(doi, sha256);
     if (!/^[\w.-]+\.pdf$/.test(name)) return null;
@@ -118,11 +138,11 @@ export function mountFulltext(app, deps = {}) {
     return place.id ? `${place.id}/${name}` : name;
   }
 
-  /** @param {Buffer} bytes @param {string} doi @param {any} result @param {any} projectId */
-  async function withLocalFile(bytes, doi, result, projectId = null) {
+  /** @param {Buffer} bytes @param {string} doi @param {any} result @param {string|null} [label] */
+  async function withLocalFile(bytes, doi, result, label = null) {
     if (!['extracted', 'scan_only'].includes(result.status)) return result;
     try {
-      const localFile = await writeLocalPdf(bytes, doi, result.sha256 || '', projectId);
+      const localFile = await writeLocalPdf(bytes, doi, result.sha256 || '', label);
       return localFile ? { ...result, localFile } : result;
     } catch { return result; }
   }
@@ -204,11 +224,16 @@ export function mountFulltext(app, deps = {}) {
 
   app.post('/api/fulltext/folder', sameOrigin, async (req, res, next) => {
     try {
-      const id = safeProjectId(req.body?.projectId);
-      if (!id) { res.status(400).json({ status: 'invalid_project' }); return; }
+      const projectId = safeProjectId(req.body?.projectId);
+      const asked = safePdfFolder(req.body?.folder);
+      if (!projectId && !asked) { res.status(400).json({ status: 'invalid_project' }); return; }
+      const id = asked
+        ? (req.body?.reuse === true ? asked : await allocateFolder(asked))
+        : projectId;
+      if (!id) { res.status(409).json({ status: 'folder_taken' }); return; }
       const place = await projectDir(id);
       if (!place) { res.status(404).json({ status: 'no_dir' }); return; }
-      res.json({ projectId: id, folder: `data/inbox-pdfs/${id}` });
+      res.json({ projectId: projectId || id, folderName: id, folder: `data/inbox-pdfs/${id}` });
     } catch (e) { next(e); }
   });
 
@@ -221,7 +246,7 @@ export function mountFulltext(app, deps = {}) {
     try {
       const got = await fetchScihubPdf(doi, safeFetch, deps.scihubOrigins);
       if (!got.bytes) { res.json({ status: got.error, attempts: got.attempts }); return; }
-      const result = await withLocalFile(got.bytes, doi, await finish(got.bytes, { source: 'Sci-Hub', sourceUrl: got.finalUrl, requestedDoi: doi, license: null }), req.body?.projectId);
+      const result = await withLocalFile(got.bytes, doi, await finish(got.bytes, { source: 'Sci-Hub', sourceUrl: got.finalUrl, requestedDoi: doi, license: null }), downloadLabel(req.body));
       const text = (result.pages || []).map(p => p.text).join(' ').toLowerCase();
       res.json({ ...result, doiVerified: text.includes(doi.toLowerCase()), attempts: got.attempts });
     } catch (e) { next(e); }
@@ -242,7 +267,7 @@ export function mountFulltext(app, deps = {}) {
         tried++;
         const got = await safeFetch(url);
         if (!got.bytes) { last = got.error || 'failed'; continue; }
-        const done = await withLocalFile(got.bytes, doi, await finish(got.bytes, { source: new URL(got.finalUrl).hostname, license: typeof body.license === 'string' ? body.license : null, tried }), body.projectId);
+        const done = await withLocalFile(got.bytes, doi, await finish(got.bytes, { source: new URL(got.finalUrl).hostname, license: typeof body.license === 'string' ? body.license : null, tried }), downloadLabel(body));
         if (done.status === 'extracted' || done.status === 'scan_only') { res.json(done); return; }
         last = done.status;
       }

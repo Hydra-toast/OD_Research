@@ -6,6 +6,7 @@ import {
   validateDirection, validateSelection, validateAnalysisVersion, EMPTY_REASONS,
 } from '../schema.js';
 import { emptyRefine, normalizeRefine } from '../research/refine.js';
+import { safePdfFolder } from '../research/pdf-folder.js';
 
 export const SCHEMA_VERSION = 2;
 export const EXAMPLE_DATA_VERSION = 'example-v1';
@@ -22,7 +23,7 @@ export function toRecord(S, scopeText) {
     papers: S.papers, userMeta: S.userMeta, exampleDataVersion: EXAMPLE_DATA_VERSION,
     queryPlan: S.queryPlan, collectedAt: S.collectedAt, estimatedTotal: S.estimatedTotal, searchPage: S.searchPage, searchWarnings: S.warnings,
     researchBrief: S.researchBrief ?? null,
-    refine: S.refine ?? emptyRefine(), summaries: S.summaries ?? [], fulltext: S.fulltext ?? {}, summaryCtx: S.summaryCtx ?? null,
+    refine: S.refine ?? emptyRefine(), summaries: S.summaries ?? [], fulltext: S.fulltext ?? {}, pdfFolder: safePdfFolder(S.pdfFolder), summaryCtx: S.summaryCtx ?? null,
     aiDirections: S.aiDirections ?? [], aiCompare: S.aiCompare ?? null, aiMemos: S.aiMemos ?? [], chatgptPlan: S.chatgptPlan ?? null, chatgptNote: S.chatgptNote ?? '', reviewStaleAt: S.reviewStaleAt ?? null,
   };
 }
@@ -37,7 +38,7 @@ export function fromRecord(r) {
     queryPlan: r.queryPlan ?? null, collectedAt: r.collectedAt ?? null, estimatedTotal: r.estimatedTotal ?? null, searchPage: r.searchPage ?? 0,
     researchBrief: r.researchBrief ?? null,
     refine: normalizeRefine(r.refine),
-    summaries: Array.isArray(r.summaries) ? r.summaries : [], fulltext: isObj(r.fulltext) ? r.fulltext : {}, summaryCtx: isObj(r.summaryCtx) ? r.summaryCtx : null,
+    summaries: Array.isArray(r.summaries) ? r.summaries : [], fulltext: isObj(r.fulltext) ? r.fulltext : {}, pdfFolder: safePdfFolder(r.pdfFolder), summaryCtx: isObj(r.summaryCtx) ? r.summaryCtx : null,
     aiDirections: Array.isArray(r.aiDirections) ? r.aiDirections : [], aiCompare: isObj(r.aiCompare) ? r.aiCompare : null, aiMemos: Array.isArray(r.aiMemos) ? r.aiMemos : [], chatgptPlan: isObj(r.chatgptPlan) ? r.chatgptPlan : null, chatgptNote: typeof r.chatgptNote === 'string' ? r.chatgptNote : '', reviewStaleAt: typeof r.reviewStaleAt === 'string' ? r.reviewStaleAt : null,
   };
 }

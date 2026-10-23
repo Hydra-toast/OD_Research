@@ -166,9 +166,13 @@ export function createPdfInbox(opts) {
         let real = file;
         try { real = await realpath(file); } catch { continue; }
         if (!pathInside(inboxDir, real) || (pdfDir && pathInside(pdfDir, real))) continue;
-        const first = await st(file);
-        await new Promise(r => setTimeout(r, stabilityMs));
-        const second = await st(file);
+        let first;
+        let second;
+        try {
+          first = await st(file);
+          await new Promise(r => setTimeout(r, stabilityMs));
+          second = await st(file);
+        } catch { continue; }
         if (first.size !== second.size || first.mtimeMs !== second.mtimeMs || second.size === 0) {
           samples.set(real, { size: second.size, mtimeMs: second.mtimeMs });
           if (second.size === 0 || first.size !== second.size) {
@@ -206,6 +210,8 @@ export function createPdfInbox(opts) {
         bind(row);
       }
       await persist();
+    } catch {
+      state.warnings = ['수신 폴더를 확인하지 못했어요. 다음 확인에서 다시 시도합니다.'];
     } finally {
       busy = false;
       if (queued) { queued = false; await scanOnce(); }
