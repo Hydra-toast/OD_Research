@@ -4,6 +4,7 @@ import { suggestKeywords } from '../research/keywords.js';
 import { applyRefine } from '../research/refine.js';
 import { listedItems, LIST_CAP } from '../research/list.js';
 import { pdfFolderName, savedPdfFolder } from '../research/pdf-folder.js';
+import { isLocalApp } from '../controller/runtime.js';
 import { summaryPrompt } from '../research/summary.js';
 import { PURPOSES } from '../research/handoff.js';
 
@@ -114,12 +115,13 @@ const INBOX_LABEL = { waiting: '감지됨', inspecting: '검사·추출 중', re
 
 /** @param {any} S */
 export function inboxPanel(S) {
+  if (!isLocalApp() && (!S.inbox || S.inbox.offline)) return '<section class="card stack"><h3>PC PDF 자동 가져오기</h3><p>PC에서 연결 서버를 실행한 뒤 연결 코드를 입력하세요. 브라우저가 로컬 네트워크 접근을 물으면 허용하세요.</p><label>PC 연결 코드<input type="password" data-pc-code autocomplete="off"></label><button class="btn" data-ract="inbox-connect">이 PC 연결</button></section>';
   const box = S.inbox || { enabled: false, dir: '', pending: 0, items: [], offline: false };
   const target = box.targetProjectId || '';
   const here = S.projectId && target === S.projectId;
   const items = box.items || [];
   return `<section class="card stack" aria-labelledby="inbox-h"><h3 id="inbox-h">다운로드 폴더에서 자동 가져오기</h3>
-    ${box.offline ? '<p class="error">수신함 API가 없습니다. 켜져 있던 서버를 끄고 npm start를 다시 실행하세요.</p>' : ''}
+    ${box.offline ? '<p class="error">PC 수신함에 연결하지 못했습니다. 로컬 서버 실행과 연결 코드, 브라우저의 로컬 네트워크 권한을 확인하세요.</p>' : ''}
     <p role="status">${box.enabled ? '폴더 감시가 켜져 있습니다.' : '폴더 감시는 꺼져 있습니다.'} 로컬 서버가 실행 중이어야 새 PDF를 발견합니다. 대기 ${box.pending || 0}건.${box.warnings?.[0] ? ` ${h(box.warnings[0])}` : ''}</p>
     <p class="meta">수신 폴더 ${h(box.dir || '')}</p>
     <div class="row">

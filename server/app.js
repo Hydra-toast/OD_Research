@@ -1,5 +1,6 @@
 // Express 앱. 정적 UI와 /api를 같은 출처로 제공한다.
 import express from 'express';
+import { mountInboxBridge } from './inbox-bridge.js';
 import { HttpError, errorHandler, requestId } from './errors.js';
 import { createStatic } from './static.js';
 import { readName, readProjectWrite } from './projects.js';
@@ -32,6 +33,7 @@ export function createApp(deps) {
       stabilityMs: deps.inbox.stabilityMs,
       now: deps.inbox.now,
     });
+    mountInboxBridge(app, deps.inbox.bridgeToken);
     mountPdfInbox(app, inbox);
     void inbox.start();
     app.locals.inbox = inbox;

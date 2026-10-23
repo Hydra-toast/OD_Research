@@ -3,6 +3,7 @@ import { S, paperById } from '../state/store.js';
 import { render } from './render.js';
 import { applyStoredPdf } from './research.js';
 import { matchInboxItem } from '../research/inbox-match.js';
+import { isLocalApp } from './runtime.js';
 
 const token = sessionStorage.getItem('rl.inbox') || ('t' + Math.random().toString(36).slice(2));
 try { sessionStorage.setItem('rl.inbox', token); } catch { /* 저장 불가 */ }
@@ -17,8 +18,13 @@ function bytesToBase64(/** @type {ArrayBuffer} */ buf) {
   return btoa(text);
 }
 
+function inboxFetch(path, options = {}) {
+  const code = sessionStorage.getItem('rl.pc-code');
+  return fetch((isLocalApp() ? '' : 'http://127.0.0.1:5173') + path, { ...options, headers: { ...options.headers, ...(isLocalApp() ? {} : { 'x-pc-token': code || '' }) } });
+}
+
 async function settings(/** @type {any} */ body) {
-  const res = await fetch('/api/pdf-inbox/settings', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+  const res = await inboxFetch('/api/pdf-inbox/settings', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
   if (res.ok) S.inbox = await res.json();
   else S.inbox = { ...(S.inbox || {}), offline: true, enabled: false, items: S.inbox?.items || [] };
   render();
@@ -31,16 +37,16 @@ async function link(/** @type {any} */ item, /** @type {string} */ paperId, /** 
   if (!paper) return;
   const kept = S.fulltext[paperId];
   if (kept?.sha256 === item.sha256 && ['extracted', 'scan_only'].includes(kept.status)) {
-    await fetch('/api/pdf-inbox/' + item.id + '/ack', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ token, projectId, paperId, sha256: item.sha256 }) });
+    await inboxFetch('/api/pdf-inbox/' + item.id + '/ack', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ token, projectId, paperId, sha256: item.sha256 }) });
     quiet.add(item.id);
     return;
   }
-  const claim = await fetch('/api/pdf-inbox/' + item.id + '/claim', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ token }) });
+  const claim = await inboxFetch('/api/pdf-inbox/' + item.id + '/claim', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ token }) });
   if (claim.status === 409) return;
   if (!claim.ok) return;
   const detail = await claim.json();
   if (S.projectId !== projectId) return;
-  const pdf = await fetch('/api/pdf-inbox/' + item.id + '/pdf', { headers: { 'x-inbox-token': token } });
+  const pdf = await inboxFetch('/api/pdf-inbox/' + item.id + '/pdf', { headers: { 'x-inbox-token': token } });
   if (!pdf.ok || S.projectId !== projectId) return;
   const buf = await pdf.arrayBuffer();
   await applyStoredPdf(paper, {
@@ -48,7 +54,7 @@ async function link(/** @type {any} */ item, /** @type {string} */ paperId, /** 
     pages: detail.pages || [], pageCount: detail.item.pageCount || 0, source: '로컬 폴더에서 가져온 PDF',
     sha256: item.sha256, pdfBase64: bytesToBase64(buf), extractor: 'pdfjs-dist',
   });
-  const ack = await fetch('/api/pdf-inbox/' + item.id + '/ack', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ token, projectId, paperId, sha256: item.sha256 }) });
+  const ack = await inboxFetch('/api/pdf-inbox/' + item.id + '/ack', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ token, projectId, paperId, sha256: item.sha256 }) });
   if (ack.ok) {
     const body = await ack.json();
     if (announce && !body.duplicate && !quiet.has(item.id)) S.fulltextMsg = `${paper.title || '논문'}에 로컬 폴더 PDF를 연결했습니다.`;
@@ -57,8 +63,8 @@ async function link(/** @type {any} */ item, /** @type {string} */ paperId, /** 
 }
 
 async function pull() {
-  if (document.hidden || applying || S.status !== 'ok') return;
-  const res = await fetch('/api/pdf-inbox');
+  if ((!isLocalApp() && !sessionStorage.getItem('rl.pc-code')) || document.hidden || applying || S.status !== 'ok') return;
+  const res = await inboxFetch('/api/pdf-inbox');
   if (!res.ok) {
     if (!S.inbox?.offline) { S.inbox = { enabled: false, dir: '', pending: 0, items: [], offline: true }; render(); }
     return;
@@ -87,6 +93,11 @@ export function initInbox() {
   document.addEventListener('click', async (e) => {
     const t = /** @type {any} */ (e.target)?.closest?.('[data-ract]');
     if (!t) return;
+    if (t.dataset.ract === 'inbox-connect') {
+      const field = /** @type {HTMLInputElement|null} */ (document.querySelector('[data-pc-code]'));
+      if (field?.value) sessionStorage.setItem('rl.pc-code', field.value.trim());
+      await pull().catch(() => { S.inbox = { offline: true }; render(); });
+    }
     if (t.dataset.ract === 'inbox-toggle') await settings({ enabled: !S.inbox?.enabled });
     if (t.dataset.ract === 'inbox-bind' && S.projectId) await settings({ targetProjectId: S.projectId });
     if (t.dataset.ract === 'inbox-copy') {
@@ -94,7 +105,7 @@ export function initInbox() {
       render();
     }
     if (t.dataset.ract === 'inbox-exclude') {
-      await fetch('/api/pdf-inbox/' + t.dataset.id + '/exclude', { method: 'POST' });
+      await inboxFetch('/api/pdf-inbox/' + t.dataset.id + '/exclude', { method: 'POST' });
       await pull();
     }
     if (t.dataset.ract === 'inbox-link') {

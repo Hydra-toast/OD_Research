@@ -20,6 +20,7 @@ export async function start(port) {
     auth, projects, search, root,
     fulltext: { mailto: config.mailto, pdfDir: process.env.INBOX_DIR || join(root, 'data', 'inbox-pdfs') },
     inbox: {
+      bridgeToken: process.env.INBOX_BRIDGE_TOKEN || '',
       inboxDir: process.env.INBOX_DIR || join(root, 'data', 'inbox-pdfs'),
       pdfDir: join(root, 'data', 'pdfs'),
       stateFile: process.env.INBOX_STATE || join(root, 'data', 'inbox-state.json'),

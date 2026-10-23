@@ -308,6 +308,7 @@ export function createPdfInbox(opts) {
 export function mountPdfInbox(app, inbox) {
   const sameOrigin = (/** @type {any} */ req, /** @type {any} */ _res, /** @type {any} */ next) => {
     if (!['127.0.0.1', 'localhost', '[::1]'].includes(req.hostname)) return next(new HttpError(403, 'bad_host', '개인 PC에서만 원문을 요청할 수 있어요.'));
+    if (_res.locals.pcBridge) return next();
     const origin = req.get('origin');
     if (origin) { try { if (new URL(origin).host !== req.get('host')) return next(new HttpError(403, 'bad_origin', '같은 출처의 요청만 받아요.')); } catch { return next(new HttpError(403, 'bad_origin', '같은 출처의 요청만 받아요.')); } }
     next();
