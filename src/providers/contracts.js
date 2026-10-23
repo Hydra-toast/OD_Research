@@ -44,7 +44,7 @@
 
 /** 구조화된 공급자 오류. 실패를 다른 모드로 바꾸지 않는다. */
 export class ProviderError extends Error {
-  /** @param {'rate_limited'|'timeout'|'save_failed'|'not_found'|'bad_mode'} code @param {string} message @param {{retryAfterSec?:number}} [extra] */
+  /** @param {'rate_limited'|'timeout'|'save_failed'|'not_found'|'bad_mode'|'quota'} code @param {string} message @param {{retryAfterSec?:number}} [extra] */
   constructor(code, message, extra = {}) {
     super(message);
     this.code = code;

@@ -5,7 +5,9 @@ import { createStatic } from './static.js';
 import { readName, readProjectWrite } from './projects.js';
 import { ProviderError } from '../src/providers/contracts.js';
 import { mountProduct } from './product.js';
-import { mountFulltext } from './fulltext.js';
+import { extractPdfText, mountFulltext } from './fulltext.js';
+import { createPdfInbox, mountPdfInbox } from './pdf-inbox.js';
+import { join } from 'node:path';
 
 const AUTH_MSG = {
   unauthorized: '로그인이 필요해요.',
@@ -13,7 +15,7 @@ const AUTH_MSG = {
   auth_not_configured: '계정 연결이 설정되지 않았어요. 예시 모드만 사용할 수 있어요.',
 };
 
-/** @param {{ auth: any, projects: any, search?: any, openai?: any, completeAi?: any, fulltext?: any, schedule?: boolean, config: { authEnabled: boolean, searchEnabled?: boolean }, root: string }} deps */
+/** @param {{ auth: any, projects: any, search?: any, openai?: any, completeAi?: any, fulltext?: any, inbox?: any, schedule?: boolean, config: { authEnabled: boolean, searchEnabled?: boolean }, root: string }} deps */
 export function createApp(deps) {
   const app = express();
   app.disable('x-powered-by');
@@ -21,6 +23,19 @@ export function createApp(deps) {
   app.use(express.json({ limit: '256kb' }));
   const product = mountProduct(app, deps);
   mountFulltext(app, deps.fulltext || {});
+  if (deps.inbox) {
+    const inbox = createPdfInbox({
+      inboxDir: deps.inbox.inboxDir || join(deps.root, 'data', 'inbox-pdfs'),
+      pdfDir: deps.inbox.pdfDir || join(deps.root, 'data', 'pdfs'),
+      stateFile: deps.inbox.stateFile || join(deps.root, 'data', 'inbox-state.json'),
+      extract: deps.inbox.extract || extractPdfText,
+      stabilityMs: deps.inbox.stabilityMs,
+      now: deps.inbox.now,
+    });
+    mountPdfInbox(app, inbox);
+    void inbox.start();
+    app.locals.inbox = inbox;
+  }
   if (deps.schedule !== false) {
     const timer = setInterval(() => { product.jobs.recover(); product.files.purge(); }, 60 * 1000);
     timer.unref?.();

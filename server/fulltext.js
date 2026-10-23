@@ -1,6 +1,8 @@
 // 원문 수집·PDF 추출. Sci-Hub는 별도 명시 요청으로만 호출하며 원본은 브라우저 보관용으로 반환한다.
 import express from 'express';
 import { createHash } from 'node:crypto';
+import { mkdir, writeFile } from 'node:fs/promises';
+import { resolve, sep } from 'node:path';
 import { get as httpsGet } from 'node:https';
 import { Readable } from 'node:stream';
 import { lookup as dnsLookup } from 'node:dns/promises';
@@ -67,17 +69,63 @@ export async function extractPdfText(buf) {
   } finally { await task.destroy?.().catch?.(() => {}); }
 }
 
+/** DOI를 파일 이름으로 바꾼다. 경로 문자는 넣지 않는다. @param {string} doi @param {string} sha256 */
+export function pdfFileName(doi, sha256) {
+  const clean = String(doi || '').trim().replace(/^https?:\/\/(?:dx\.)?doi\.org\//i, '');
+  const safe = clean.replace(/[^A-Za-z0-9._-]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 160);
+  const hash = String(sha256 || '').replace(/[^a-f0-9]/gi, '').slice(0, 16);
+  return `${safe || hash || 'paper'}.pdf`;
+}
+
 /** @param {string} text */
 export function findDoi(text) {
   const m = String(text || '').match(/10\.\d{4,9}\/[^\s"<>]+/);
   return m ? m[0].replace(/[).,;\]]+$/, '') : null;
 }
 
-/** @param {any} app @param {{ fetchImpl?: any, mailto?: string, lookup?: any, extract?: any, scihubOrigins?: string[] }} [deps] */
+/** @param {any} app @param {{ fetchImpl?: any, mailto?: string, lookup?: any, extract?: any, scihubOrigins?: string[], pdfDir?: string }} [deps] */
 export function mountFulltext(app, deps = {}) {
   const doFetch = deps.fetchImpl ?? pinnedGet;
   const lookup = deps.lookup ?? ((/** @type {string} */ h) => dnsLookup(h, { all: true }));
   const extract = deps.extract ?? extractPdfText;
+
+  /** @param {any} value */
+  function safeProjectId(value) {
+    const id = String(value || '').trim();
+    return /^[A-Za-z0-9-]{4,40}$/.test(id) ? id : null;
+  }
+
+  /** 조사 폴더. projectId가 있으면 inbox-pdfs 아래에 둔다. @param {any} projectId */
+  async function projectDir(projectId) {
+    if (!deps.pdfDir) return null;
+    const root = resolve(deps.pdfDir);
+    const id = safeProjectId(projectId);
+    const dir = id ? resolve(root, id) : root;
+    if (dir !== root && !dir.startsWith(root + sep)) return null;
+    await mkdir(dir, { recursive: true });
+    return { dir, id };
+  }
+
+  /** 받은 PDF를 조사별 폴더에 쓴다. 정적 공개 경로가 아니다. @param {Buffer} bytes @param {string} doi @param {string} sha256 @param {any} projectId */
+  async function writeLocalPdf(bytes, doi, sha256, projectId) {
+    const place = await projectDir(projectId);
+    if (!place) return null;
+    const name = pdfFileName(doi, sha256);
+    if (!/^[\w.-]+\.pdf$/.test(name)) return null;
+    const file = resolve(place.dir, name);
+    if (!file.startsWith(place.dir + sep)) return null;
+    await writeFile(file, bytes);
+    return place.id ? `${place.id}/${name}` : name;
+  }
+
+  /** @param {Buffer} bytes @param {string} doi @param {any} result @param {any} projectId */
+  async function withLocalFile(bytes, doi, result, projectId = null) {
+    if (!['extracted', 'scan_only'].includes(result.status)) return result;
+    try {
+      const localFile = await writeLocalPdf(bytes, doi, result.sha256 || '', projectId);
+      return localFile ? { ...result, localFile } : result;
+    } catch { return result; }
+  }
 
   const sameOrigin = (/** @type {any} */ req, /** @type {any} */ _res, /** @type {any} */ next) => {
     if (!['127.0.0.1', 'localhost', '[::1]'].includes(req.hostname)) return next(new HttpError(403, 'bad_host', '개인 PC에서만 원문을 요청할 수 있어요.'));
@@ -154,6 +202,16 @@ export function mountFulltext(app, deps = {}) {
       ...(['extracted', 'scan_only'].includes(out.status) ? { pdfBase64: bytes.toString('base64'), pdfBytes: bytes.length } : {}), ...extra };
   }
 
+  app.post('/api/fulltext/folder', sameOrigin, async (req, res, next) => {
+    try {
+      const id = safeProjectId(req.body?.projectId);
+      if (!id) { res.status(400).json({ status: 'invalid_project' }); return; }
+      const place = await projectDir(id);
+      if (!place) { res.status(404).json({ status: 'no_dir' }); return; }
+      res.json({ projectId: id, folder: `data/inbox-pdfs/${id}` });
+    } catch (e) { next(e); }
+  });
+
   let scihubBusy = false;
   app.post('/api/fulltext/scihub', sameOrigin, async (req, res, next) => {
     const doi = normalizeDoi(req.body?.doi);
@@ -163,7 +221,7 @@ export function mountFulltext(app, deps = {}) {
     try {
       const got = await fetchScihubPdf(doi, safeFetch, deps.scihubOrigins);
       if (!got.bytes) { res.json({ status: got.error, attempts: got.attempts }); return; }
-      const result = await finish(got.bytes, { source: 'Sci-Hub', sourceUrl: got.finalUrl, requestedDoi: doi, license: null });
+      const result = await withLocalFile(got.bytes, doi, await finish(got.bytes, { source: 'Sci-Hub', sourceUrl: got.finalUrl, requestedDoi: doi, license: null }), req.body?.projectId);
       const text = (result.pages || []).map(p => p.text).join(' ').toLowerCase();
       res.json({ ...result, doiVerified: text.includes(doi.toLowerCase()), attempts: got.attempts });
     } catch (e) { next(e); }
@@ -184,7 +242,7 @@ export function mountFulltext(app, deps = {}) {
         tried++;
         const got = await safeFetch(url);
         if (!got.bytes) { last = got.error || 'failed'; continue; }
-        const done = await finish(got.bytes, { source: new URL(got.finalUrl).hostname, license: typeof body.license === 'string' ? body.license : null, tried });
+        const done = await withLocalFile(got.bytes, doi, await finish(got.bytes, { source: new URL(got.finalUrl).hostname, license: typeof body.license === 'string' ? body.license : null, tried }), body.projectId);
         if (done.status === 'extracted' || done.status === 'scan_only') { res.json(done); return; }
         last = done.status;
       }
@@ -195,9 +253,11 @@ export function mountFulltext(app, deps = {}) {
   app.post('/api/fulltext/upload', sameOrigin, express.raw({ type: () => true, limit: LIMITS.fileBytes + 1024 }), async (req, res, next) => {
     try {
       if (!Buffer.isBuffer(req.body) || !req.body.length) throw new HttpError(400, 'empty', '파일이 비어 있어요.');
-      const done = await finish(req.body, { source: 'upload', license: null });
-      const firstText = (done.pages || []).slice(0, 2).map((/** @type {any} */ p) => p.text).join(' ');
-      res.json({ ...done, doiFound: findDoi(firstText) });
+      const firstText = (await finish(req.body, { source: 'upload', license: null }));
+      const text = (firstText.pages || []).slice(0, 2).map((/** @type {any} */ p) => p.text).join(' ');
+      const doiFound = findDoi(text);
+      const done = await withLocalFile(req.body, doiFound || '', firstText);
+      res.json({ ...done, doiFound });
     } catch (e) { next(e); }
   });
 }

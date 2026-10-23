@@ -1,6 +1,9 @@
 import { afterEach, describe, expect, it } from 'vitest';
+import { mkdtemp, readFile, rm, stat } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { createApp } from '../server/app.js';
-import { normalizeDoi, parseScihubPage } from '../server/scihub.js';
+import { fetchScihubPdf, normalizeDoi, parseScihubPage } from '../server/scihub.js';
 import { request } from 'node:http';
 
 // 가상 응답만 사용하며 실제 논문·Sci-Hub에 연결하지 않는다.
@@ -24,6 +27,17 @@ describe('Sci-Hub adapter and HTTP boundary', () => {
     expect(normalizeDoi('https://doi.org/' + DOI)).toBe(DOI);
     expect(normalizeDoi('https://127.0.0.1/secret')).toBeNull();
     expect(parseScihubPage('<meta name="citation_pdf_url" content="/paper.pdf?a=1&amp;b=2"><object data="/paper.pdf?a=1&amp;b=2#view=FitH"></object>', 'https://fixture.example/doi', DOI).urls).toEqual(['https://fixture.example/paper.pdf?a=1&b=2']);
+  });
+  it('sci-hub.st를 먼저 보고, PDF가 없으면 sci-hub.ru를 본다', async () => {
+    const seen = [];
+    const result = await fetchScihubPdf(DOI, async (url) => {
+      seen.push(url);
+      if (url.startsWith('https://sci-hub.st/')) return { bytes: Buffer.from('<html>nothing</html>'), finalUrl: url };
+      if (url.startsWith('https://sci-hub.ru/') && !url.endsWith('.pdf')) return { bytes: Buffer.from('<meta name="citation_pdf_url" content="https://files.example/p.pdf">'), finalUrl: url };
+      return { bytes: PDF, finalUrl: url };
+    });
+    expect(seen.map(String)).toEqual([`https://sci-hub.st/${DOI}`, `https://sci-hub.ru/${DOI}`, 'https://files.example/p.pdf']);
+    expect(result.bytes.subarray(0, 5).toString()).toBe('%PDF-');
   });
   it('다른 DOI와 로봇 확인 화면을 성공으로 표시하지 않는다', () => {
     expect(parseScihubPage('<meta name="citation_doi" content="10.9999/other"><embed src="/x.pdf">', 'https://fixture.example/', DOI).status).toBe('doi_mismatch');
@@ -78,6 +92,27 @@ describe('Sci-Hub adapter and HTTP boundary', () => {
     expect((await (await api.post()).json()).status).toBe('too_large');
     large = false;
     expect((await (await api.post()).json()).status).toBe('extracted');
+  });
+  it('조사별 폴더는 다운로드 요청 때 만들고 PDF는 그 안에 둔다', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'rl-pdf-'));
+    try {
+      const api = await start(async () => new Response(PDF), { pdfDir: dir });
+      const made = await (await fetch(api.base + '/api/fulltext/folder', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ projectId: 'p-test1' }) })).json();
+      expect(made.folder).toBe('data/inbox-pdfs/p-test1');
+      expect((await stat(join(dir, 'p-test1'))).isDirectory()).toBe(true);
+      const body = await (await api.post({ doi: DOI, projectId: 'p-test1' })).json();
+      expect(body.localFile).toBe('p-test1/10.9999_fixture.pdf');
+      expect((await readFile(join(dir, 'p-test1', '10.9999_fixture.pdf'))).subarray(0, 5).toString()).toBe('%PDF-');
+    } finally { await rm(dir, { recursive: true, force: true }); }
+  });
+  it('받은 PDF를 지정한 로컬 폴더에 파일로 남긴다', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'rl-pdf-'));
+    try {
+      const api = await start(async () => new Response(PDF), { pdfDir: dir });
+      const body = await (await api.post()).json();
+      expect(body.localFile).toBe('10.9999_fixture.pdf');
+      expect((await readFile(join(dir, body.localFile))).subarray(0, 5).toString()).toBe('%PDF-');
+    } finally { await rm(dir, { recursive: true, force: true }); }
   });
   it('동시 다운로드를 하나로 제한한다', async () => {
     let release = () => {}, entered = () => {};

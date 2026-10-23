@@ -25,10 +25,10 @@ test('랜딩: 문구를 적고 고칠 수 있다', async ({ page }) => {
 
 test('빈 입력은 안내, 범위 밖 입력은 실검색 미연결 안내', async ({ page }) => {
   await page.goto('/');
-  await page.getByRole('button', { name: '조사 방향 정리하기' }).click();
+  await page.getByRole('button', { name: '찾기', exact: true }).click();
   await expect(page.locator('#brief-error')).toBeVisible();
   await page.locator('#brief').fill('양자 컴퓨터 큐비트');
-  await page.getByRole('button', { name: '조사 방향 정리하기' }).click();
+  await page.getByRole('button', { name: '찾기', exact: true }).click();
   await expect(page.getByRole('heading', { name: '이 주제의 실검색은 아직 연결되지 않았어요' })).toBeVisible();
   await expect(page.getByRole('button', { name: /EUV 포토레지스트 예시로 보기/ })).toBeVisible();
 });
@@ -55,7 +55,7 @@ test('범위 수정·갈래 필터·정렬·선택 보존', async ({ page }) => 
   await expect(page.getByText(/인용수가 미확인인 항목은 0이 아니라 뒤로/)).toBeVisible();
   await page.getByLabel('정렬').selectOption('recent');
 
-  await page.getByRole('button', { name: '잘 모르겠어요. 우선 추천대로 볼게요' }).click();
+  await page.getByRole('button', { name: '우선 추천대로 볼게요' }).click();
   await expect(page.locator('.scope-list')).not.toContainText('제외');
   await expect(page.locator('.sel-bar')).toContainText('선택 1편');
   expect(picked).toContain('예시 논문');
@@ -64,6 +64,7 @@ test('범위 수정·갈래 필터·정렬·선택 보존', async ({ page }) => 
 test('연구실 정보를 입력하면 탐색 화면에 남는다', async ({ page }) => {
   await startEuv(page);
   await expect(page.getByRole('heading', { name: '연구 방향' })).toHaveCount(0);
+  await page.getByText('추가 정보 (선택)').click();
   await page.getByRole('button', { name: '연구실 정보 입력' }).click();
   await page.getByRole('button', { name: '예시 연구실 불러오기' }).click();
   await expect(page.locator('#lab-home')).toContainText('예시 연구실');
@@ -72,7 +73,7 @@ test('연구실 정보를 입력하면 탐색 화면에 남는다', async ({ pag
 test('HBM 예시 논문은 목록으로 보인다', async ({ page }) => {
   await page.goto('/');
   await page.locator('#brief').fill('HBM 패키징');
-  await page.getByRole('button', { name: '조사 방향 정리하기' }).click();
+  await page.getByRole('button', { name: '찾기', exact: true }).click();
   await expect(page.getByRole('heading', { name: '연구 방향' })).toHaveCount(0);
   await expect(page.locator('#panel-explore article.paper')).toHaveCount(3);
 });
@@ -184,7 +185,7 @@ test.describe('모바일 375px', () => {
 test('reduced-motion에서도 동작', async ({ browser }) => {
   const ctx = await browser.newContext({ reducedMotion: 'reduce' });
   const page = await ctx.newPage();
-  await page.goto('http://localhost:5173/');
+  await page.goto('/');
   expect(await page.evaluate(() => matchMedia('(prefers-reduced-motion: reduce)').matches)).toBe(true);
   expect(await page.evaluate(() => getComputedStyle(document.documentElement).scrollBehavior)).toBe('auto');
   await ctx.close();

@@ -28,13 +28,15 @@ test(live ? '실제 Sci-Hub 1편: 원문 확보·PDF 저장·재열기·프롬�
   await page.goto('/');
   await expect.poll(() => page.evaluate(async () => (await import('/src/controller/runtime.js')).runtime.search)).toBe(true);
   await page.locator('#brief').fill(live ? 'plant diversity' : 'fixture');
-  await page.getByRole('button', { name: '조사 방향 정리하기', exact: true }).click();
-  await page.getByRole('button', { name: '현재 내용으로 넓게 탐색하기', exact: true }).click();
+  await page.getByRole('button', { name: '찾기', exact: true }).click();
+  await page.getByRole('button', { name: '바로 찾기', exact: true }).click();
   const panel = page.locator('#panel-explore');
   await expect(panel.locator('article.paper')).toHaveCount(1);
   const response = page.waitForResponse(r => r.url().endsWith('/api/fulltext/scihub'));
+  await panel.getByText('자세히').click();
   await panel.getByRole('button', { name: 'Sci-Hub 원문 받기', exact: true }).click();
   downloaded = await (await response).json();
+  await panel.getByText('자세히').click();
   expect(downloaded.status, JSON.stringify({ status: downloaded.status, attempts: downloaded.attempts })).toBe('extracted');
   await expect(panel.getByRole('button', { name: '보관 PDF 저장' })).toBeVisible();
   await expect(page.locator('#save-state')).toContainText('저장됨');
@@ -61,6 +63,7 @@ test(live ? '실제 Sci-Hub 1편: 원문 확보·PDF 저장·재열기·프롬�
   await page.reload();
   await expect(page.locator('#workspace')).toBeHidden();
   await page.locator('#saved-list').getByRole('button', { name: '열기' }).click();
+  await panel.getByText('자세히').click();
   await expect(panel.getByRole('button', { name: '보관 PDF 저장' })).toBeVisible();
   const restoredPdf = await page.evaluate(async id => {
     const { S } = await import('/src/state/store.js');
@@ -69,15 +72,18 @@ test(live ? '실제 Sci-Hub 1편: 원문 확보·PDF 저장·재열기·프롬�
     return blob?.size;
   }, paper.id);
   expect(restoredPdf).toBe(bytes.length);
-  await panel.getByRole('button', { name: /^보이는 1편 모두 선택/ }).click();
-  await panel.getByRole('button', { name: /연구군·읽기 순서 프롬프트/ }).click();
+  await panel.getByText('전달 방식과 미리보기', { exact: true }).click();
+  await panel.locator('[data-ract=summary-mode]').selectOption('text');
+  await panel.getByRole('button', { name: '1편으로 정리 프롬프트 복사' }).click();
   const prompt = panel.locator('[data-ract=summary-prompt-edit]');
   await expect(prompt).toHaveValue(/원문 텍스트 포함 1편/);
   await expect(prompt).toHaveValue(/\[p\.1\]/);
   if (!live) {
     await page.route('**/api/fulltext/scihub', r => r.fulfill({ json: { status: 'challenge_required' } }));
+    await panel.getByText('자세히').click();
     await panel.getByRole('button', { name: 'Sci-Hub 원문 받기', exact: true }).click();
     await expect(panel).toContainText('기존 자료 유지');
+    await panel.getByText('자세히').click();
     await expect(panel.getByRole('button', { name: '보관 PDF 저장' })).toBeVisible();
     expect(await page.evaluate(async () => {
       const { S } = await import('/src/state/store.js');
@@ -86,9 +92,9 @@ test(live ? '실제 Sci-Hub 1편: 원문 확보·PDF 저장·재열기·프롬�
     const quota = await page.evaluate(async () => {
       const { saveFulltext, loadFulltextPdf, createIdbRepository } = await import('/src/repository/idb.js');
       const pdf = new Blob(['%PDF-fixture'], { type: 'application/pdf' });
-      for (let i = 0; i < 5; i++) await saveFulltext('quota-fixture', `example:${i}`, [], pdf);
+      for (let i = 0; i < 30; i++) await saveFulltext('quota-fixture', `example:${i}`, [], pdf);
       let rejected = false;
-      try { await saveFulltext('quota-fixture', 'example:6', [], pdf); } catch { rejected = true; }
+      try { await saveFulltext('quota-fixture', 'example:overflow', [], pdf); } catch { rejected = true; }
       const previous = (await loadFulltextPdf('quota-fixture', 'example:0'))?.size;
       await createIdbRepository().delete('quota-fixture');
       return { rejected, previous, deleted: (await loadFulltextPdf('quota-fixture', 'example:0')) === null };

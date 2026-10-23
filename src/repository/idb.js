@@ -4,6 +4,7 @@ import { ProviderError } from '../providers/contracts.js';
 
 export { SCHEMA_VERSION };
 const DB = 'research-landscape', STORE = 'projects', FT_STORE = 'fulltexts';
+export const PDF_KEEP = { fileBytes: 20 * 1024 * 1024, files: 30, totalBytes: 600 * 1024 * 1024 };
 
 /** 원문 쪽별 텍스트는 프로젝트 레코드와 분리해 저장한다. 키는 projectId:paperId. */
 export async function saveFulltext(/** @type {string} */ projectId, /** @type {string} */ paperId, /** @type {any[]} */ pages, /** @type {Blob|null} */ pdf = null) {
@@ -11,16 +12,22 @@ export async function saveFulltext(/** @type {string} */ projectId, /** @type {s
   await new Promise((res, rej) => {
     const t = db.transaction(FT_STORE, 'readwrite');
     const store = t.objectStore(FT_STORE), id = `${projectId}:${paperId}`;
+    let quota = false, settled = false;
+    const finish = (/** @type {(v: any) => void} */ fn, /** @type {any} */ value) => { if (settled) return; settled = true; db.close(); fn(value); };
     const rows = store.getAll();
     rows.onsuccess = () => {
       const others = rows.result.filter(r => r.projectId === projectId && r.id !== id && r.pdf);
-      if (pdf && (pdf.size > 20 * 1024 * 1024 || others.length >= 5 || others.reduce((s, r) => s + r.pdf.size, pdf.size) > 100 * 1024 * 1024)) {
-        t.abort(); return;
+      const used = others.reduce((s, r) => s + (r.pdf?.size || 0), 0);
+      if (pdf && (pdf.size > PDF_KEEP.fileBytes || others.length >= PDF_KEEP.files || used + pdf.size > PDF_KEEP.totalBytes)) {
+        quota = true; t.abort(); return;
       }
       store.put({ id, projectId, paperId, pages, pdf, at: new Date().toISOString() });
     };
-    t.oncomplete = () => { db.close(); res(null); };
-    t.onerror = t.onabort = () => { db.close(); rej(new ProviderError('save_failed', '원문 저장 실패')); };
+    t.oncomplete = () => finish(res, null);
+    t.onerror = t.onabort = () => {
+      const full = quota || t.error?.name === 'QuotaExceededError';
+      finish(rej, new ProviderError(full ? 'quota' : 'save_failed', full ? '브라우저 저장 공간 부족' : '원문 저장 실패'));
+    };
   });
 }
 export async function loadFulltextPdf(/** @type {string} */ projectId, /** @type {string} */ paperId) {

@@ -57,8 +57,23 @@ mark{background:var(--accent-soft);color:var(--ink);box-shadow:inset 0 -2px var(
 .tab[aria-selected=true]{color:var(--accent);border-bottom-color:var(--accent)}
 .count{display:inline-block;min-width:24px;text-align:center;background:var(--accent-soft);border-radius:999px;font-size:.8125rem;color:var(--accent)}
 .save-state{font-size:.875rem;color:var(--muted)}.save-state.err{color:#9a1c1c}
-.explore{display:grid;grid-template-columns:340px 1fr;gap:24px;grid-template-areas:"scope main" "branches main";align-items:start}
-.area-scope{grid-area:scope}.area-branches{grid-area:branches}.area-main{grid-area:main;display:grid;gap:24px}
+.explore{display:grid;grid-template-columns:1fr;gap:16px}
+.area-main{display:grid;gap:8px}
+.filter-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.how-line{margin:16px 0 0;padding-left:1.2rem}
+.paper-line{display:grid;grid-template-columns:auto auto minmax(0,1fr) auto;column-gap:8px;row-gap:2px;align-items:center}
+.paper-line h3{min-width:0}
+.paper-line .meta{grid-column:1 / -1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.paper-end{display:inline-flex;gap:6px;align-items:center;white-space:nowrap}
+.topic-line{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.focus-label{display:block;font-weight:700}
+#summary-focus{margin-top:-8px;min-height:84px}
+.ft-mark{font-weight:700}
+.ft-mark.ok{color:var(--accent)}
+.ft-mark.warn{color:var(--warn)}
+.spin{display:inline-block;width:1em;height:1em;border:2px solid var(--line);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite;vertical-align:-2px}
+@keyframes spin{to{transform:rotate(360deg)}}
+progress{width:min(420px,100%);height:10px;accent-color:var(--accent)}
 .lab-home{margin-top:16px}
 .stack{display:grid;gap:16px}
 .orig{background:var(--accent-soft);border-radius:10px;padding:8px 16px;font-size:.9375rem}
@@ -66,14 +81,22 @@ mark{background:var(--accent-soft);color:var(--ink);box-shadow:inset 0 -2px var(
 .branch-btn{display:block;width:100%;text-align:left;border:1px solid var(--line);background:#fff;border-radius:10px;padding:8px 16px;margin-top:8px;cursor:pointer}
 .branch-btn[aria-pressed=true]{border-color:var(--accent);background:var(--accent-soft)}
 .paper{display:grid;gap:6px;padding:12px 16px}
+.paper-got{background:#E7F6EA;border-color:#B7DCC0}
+.pick-btn{width:20px;height:20px;min-width:20px;padding:0;border:1.5px solid #6b7c86;border-radius:5px;background:#fff;display:grid;place-items:center;cursor:pointer}
+.pick-btn:hover{border-color:var(--accent);background:var(--accent-soft)}
+.pick-btn[aria-pressed=true]{background:var(--accent);border-color:var(--accent)}
+.pick-btn[aria-pressed=true]::after{content:"";width:5px;height:9px;border:solid #fff;border-width:0 2px 2px 0;transform:rotate(45deg) translate(-1px,-1px)}
 .paper h3{font-size:1rem;margin:0;line-height:1.35}
 .paper p{margin:0}
+.paper-more{display:grid;gap:6px}
 .paper-more summary{cursor:pointer;color:var(--muted);font-size:.875rem}
-.paper-more[open] summary{margin-bottom:6px}
+.paper .row,.stack>.row{margin-top:0}
+.paper .notice{margin-top:0}
 .paper-top{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
 .meta{color:var(--muted);font-size:.875rem}
 dl.kv{margin:0;display:grid;grid-template-columns:auto 1fr;gap:4px 16px;font-size:.9375rem}dl.kv dt{color:var(--muted)}dl.kv dd{margin:0}
-.toolbar{display:flex;gap:16px;align-items:center;flex-wrap:wrap}
+.toolbar{display:flex;gap:8px 16px;align-items:center;flex-wrap:wrap}
+.toolbar h2{flex:1 0 100%}
 .toolbar select{width:auto;margin:0}
 .dir-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px}
 .dir{display:grid;gap:8px;align-content:start}
@@ -97,7 +120,7 @@ blockquote{margin:8px 0;padding:8px 16px;border-left:3px solid var(--accent);bac
 .fallback{width:100%;min-height:160px;margin-top:8px}
 .cmp-cards{display:none;gap:12px}
 @media(max-width:960px){
-  .explore{grid-template-columns:1fr;grid-template-areas:"scope" "branches" "main"}
+  .filter-grid{grid-template-columns:1fr}
 }
 @media(max-width:560px){
   .wrap{width:calc(100% - 32px)}

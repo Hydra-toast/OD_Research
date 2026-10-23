@@ -14,8 +14,8 @@ async function enable(page) {
 }
 async function submit(page) {
   await page.locator('#brief').fill('EUV photoresist');
-  await page.getByRole('button', { name: '조사 방향 정리하기', exact: true }).click();
-  await page.getByRole('button', { name: '현재 내용으로 넓게 탐색하기', exact: true }).click();
+  await page.getByRole('button', { name: '찾기', exact: true }).click();
+  await page.getByRole('button', { name: '바로 찾기', exact: true }).click();
 }
 test('키 없는 실제 모드 응답은 출처·초록·선택·복원을 보존하고 예시로 표시하지 않는다', async ({ page }) => {
   await page.route('**/api/search', async r => {
@@ -28,11 +28,12 @@ test('키 없는 실제 모드 응답은 출처·초록·선택·복원을 보�
   await expect(panel).toContainText('출처: OpenAlex');
   await expect(panel).toContainText('OpenAlex 공개 검색');
   await expect(panel).not.toContainText('가상 예시 · 실제 논문 아님');
+  await panel.getByText('자세히').click();
   await panel.getByRole('button', { name: '초록 보기', exact: true }).click();
   await expect(page.locator('#ev-body')).toContainText(paper.abstract);
   await expect(page.locator('#ev-body')).not.toContainText('가상 예시 문서');
   await page.keyboard.press('Escape');
-  await panel.getByRole('button', { name: '준비 자료에 추가', exact: true }).click();
+  await expect(panel.locator('.sel-bar')).toContainText('선택 1편');
   await expect(page.locator('#save-state')).toContainText('저장됨');
   await page.reload();
   await expect(page.locator('#workspace')).toBeHidden();

@@ -55,6 +55,18 @@ describe('탐색 뷰', () => {
     S.addOpen = true; S.addError = '제목을 적어주세요.';
     expect(exploreHtml(S)).toContain('role="alert" id="add-error"');
   });
+  it('실검색 목록은 30편이고 받는 중에는 취소로 바뀐다', () => {
+    S.dataMode = 'real';
+    S.papers = Array.from({ length: 40 }, (_, i) => ({ id: `oa:${i}`, title: `Paper ${i}`, authors: ['Kim'], year: 2020, venue: 'Journal', origin: 'provider', access: 'abstract', abstract: 'text', doi: `10.1000/${i}` }));
+    S.selPapers = S.papers.slice(0, 30).map(p => p.id);
+    const html = exploreHtml(S);
+    expect(html.match(/<article/g)).toHaveLength(30);
+    expect(html).toContain('30편 원문 모두 받기');
+    expect(html).toContain('paper-row');
+    expect(html).not.toContain('추가 결과 펼치기');
+    S.fulltextBusy = true;
+    expect(exploreHtml(S)).toContain('받기 취소');
+  });
   it('상태 태그는 아이콘 + 글자', () => {
     expect(exploreHtml(S)).toMatch(/<span class="ico" aria-hidden="true">[✓!◇i]<\/span>/);
   });

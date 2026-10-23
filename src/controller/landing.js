@@ -19,18 +19,18 @@ function showPlan() {
   const ctx = contextOf();
   const consult = consultPrompt(ctx);
   box.hidden = false;
-  box.innerHTML = `<p class="hint">입력 정리 → ChatGPT 상담 → 검색 문구 확인 → 논문 수집 → 규칙 기반 정렬 → 결과 확인. 이 사이트는 ChatGPT를 호출하지 않아요.</p>
-    <h2>내 ChatGPT에 붙여 넣을 상담 내용</h2>
-    <p>복사한 글을 본인 ChatGPT 대화에 직접 붙여 넣으세요. 이 버튼은 ChatGPT로 전송하지 않아요. 사용량 제한은 ChatGPT 계정 기준이에요.</p>
-    <textarea data-consult-prompt rows="12">${h(consult)}</textarea>
+  box.innerHTML = `<div class="row"><button type="button" class="btn primary" data-brief="broad">바로 찾기</button></div>
+    <details><summary>ChatGPT로 검색 문구 다듬기</summary>
+    <p class="hint">복사한 글을 본인 ChatGPT에 붙여 넣으세요. 이 사이트는 전송하지 않습니다.</p>
+    <textarea data-consult-prompt rows="8">${h(consult)}</textarea>
     <div class="row">
-      <button type="button" class="btn primary" data-brief="copy">ChatGPT 상담 프롬프트 복사</button>
+      <button type="button" class="btn" data-brief="copy">ChatGPT 상담 프롬프트 복사</button>
       <button type="button" class="btn" data-brief="paste">상담 결과 붙여넣기</button>
       <button type="button" class="btn" data-brief="manual">직접 검색 문구 작성</button>
-      <button type="button" class="btn" data-brief="broad">현재 내용으로 넓게 탐색하기</button>
     </div>
     <form data-brief-form="consult" hidden class="stack"><label>상담 결과<textarea data-consult-result rows="8" placeholder="consult-v1 JSON 또는 일반 문장"></textarea></label><button class="btn" type="submit">결과 확인</button><div data-brief-status></div></form>
-    <form data-brief-form="manual" hidden class="stack"><p class="hint">영문 검색 문구를 직접 적으세요. 비운 칸은 실행하지 않아요.</p>${[1, 2, 3, 4, 5].map(n => `<label>검색 문구 ${n}<input data-manual ${n === 1 ? 'value="perovskite solar cell stability"' : ''} placeholder="english keywords"></label>`).join('')}<button class="btn primary" type="submit">작성한 검색 문구 실행</button></form>`;
+    <form data-brief-form="manual" hidden class="stack">${[1, 2, 3, 4, 5].map(n => `<label>검색 문구 ${n}<input data-manual ${n === 1 ? 'value="perovskite solar cell stability"' : ''} placeholder="english keywords"></label>`).join('')}<button class="btn primary" type="submit">작성한 검색 문구 실행</button></form>
+    </details>`;
 }
 
 function setFormStatus(/** @type {HTMLFormElement} */ form, /** @type {string} */ message, /** @type {string} */ repair = '') {
@@ -47,7 +47,7 @@ function queryEditor(/** @type {any} */ brief) {
   const rows = brief.queries.map((/** @type {any} */ q) => `<label class="card"><input type="checkbox" data-query checked value="${h(q.text)}"> <strong>${h(q.text)}</strong><br><span class="hint">${h(q.purpose || '')}</span></label>`).join('');
   const confirm = brief.needsConfirm?.length ? `<p class="notice">사용자 확인 필요: 근거 문장이 입력한 내용에 없어요. ${brief.needsConfirm.map(h).join(', ')}. 형식 확인은 내용이 사실이라는 뜻이 아니에요.</p>` : '<p class="hint">형식만 확인했어요. 내용의 사실 여부는 검증하지 않았어요.</p>';
   const notes = [...(brief.warnings || []), ...(brief.assumptions || []), ...(brief.unknowns || [])];
-  return `<h2>검색 문구를 확인하고 실행</h2>${confirm}<p>제안된 초기 조사 주제: ${h(brief.selectedTopic?.name || '직접 확인')}</p><p>${h(brief.selectedTopic?.question || '')}</p>${notes.length ? `<details open><summary>가정과 확인할 내용</summary><ul>${notes.map(n => `<li>${h(n)}</li>`).join('')}</ul></details>` : ''}<p class="hint">원래 입력은 바꾸지 않았어요. 가정과 검색 문구를 확인한 뒤 실행하세요.</p><form data-brief-form="queries" class="stack">${rows}<label>검색 문구 추가<input data-query-add type="text" placeholder="영문 검색 문구"></label><div class="row"><button class="btn primary" type="submit">선택한 검색 문구 실행</button></div></form>`;
+  return `<h2>검색 문구를 확인하고 실행</h2>${confirm}<p>제안된 초기 조사 주제: ${h(brief.selectedTopic?.name || '직접 확인')}</p><p>${h(brief.selectedTopic?.question || '')}</p>${notes.length ? `<details><summary>가정과 확인할 내용</summary><ul>${notes.map(n => `<li>${h(n)}</li>`).join('')}</ul></details>` : ''}<p class="hint">원래 입력은 바꾸지 않았어요. 가정과 검색 문구를 확인한 뒤 실행하세요.</p><form data-brief-form="queries" class="stack">${rows}<label>검색 문구 추가<input data-query-add type="text" placeholder="영문 검색 문구"></label><div class="row"><button class="btn primary" type="submit">선택한 검색 문구 실행</button></div></form>`;
 }
 
 export function initLanding() {

@@ -6,10 +6,12 @@ import { render, renderSaved } from './controller/render.js';
 import { initFromUrl, handlePopState } from './controller/session.js';
 import { initAccount } from './controller/account.js';
 import { loadRuntime } from './controller/runtime.js';
+import { initInbox } from './controller/inbox.js';
 
 initLanding();
 initEvents();
 initResearch();
+initInbox();
 window.addEventListener('popstate', () => { handlePopState(); });
 render();
 renderSaved();

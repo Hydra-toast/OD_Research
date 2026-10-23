@@ -15,6 +15,7 @@ import { runtime } from './runtime.js';
 import { ProviderError } from '../providers/contracts.js';
 import { ruleRank, RANK_VERSION } from '../research/rank.js';
 import { applyRefine, mergePool, refinedQueries } from '../research/refine.js';
+import { autoSelectListed } from '../research/list.js';
 
 /** 다음 검색이 끝날 때 주소를 어떻게 바꿀지(첫 진입은 기록을 늘리지 않는다). */
 let nextUrlMode = /** @type {'push'|'replace'} */ ('push');
@@ -57,6 +58,7 @@ const runner = createSearchRunner(routed, {
     if (!same) resetState({ input: text, queryPlan: keepPlan, dataMode: real ? 'real' : 'example', forceExample: S.forceExample, cached: !!r.cached, collectedAt: r.collectedAt || null, estimatedTotal: r.estimatedTotal ?? null, searchPage: S.searchPage || 0 });
     S.papers = [...r.papers, ...keepUser]; S.warnings = r.warnings; S.topicKey = key;
     S.status = r.papers.length ? 'ok' : 'empty';
+    if (real && S.status === 'ok') autoSelectListed(S);
     const mode = nextUrlMode; nextUrlMode = 'push';
     if (r.papers.length && !S.projectId) {
       S.projectId = newId(); S.name = `${real ? text.slice(0, 80) : TOPIC_DEFS[key ?? ''].name} 조사`;
@@ -112,6 +114,7 @@ export async function searchMany(queries, label, criterion) {
   S.researchBrief = { ...(criterion || {}), rankVersion: RANK_VERSION, importedAt: new Date().toISOString(), speech: S.input };
   S.topicKey = null;
   S.status = papers.length ? 'ok' : 'empty';
+  if (S.status === 'ok') autoSelectListed(S);
   if (S.status === 'ok' && !S.projectId) {
     S.projectId = newId();
     S.name = `${label.slice(0, 80)} 조사`;

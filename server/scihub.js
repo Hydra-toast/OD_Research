@@ -1,5 +1,5 @@
 // DOI 조회 전용 어댑터. 모델 API/MCP 프로세스 없이 검증된 HTTP 경로를 사용한다.
-export const SCIHUB_ORIGINS = ['https://sci-hub.ru', 'https://sci-hub.st'];
+export const SCIHUB_ORIGINS = ['https://sci-hub.st', 'https://sci-hub.ru'];
 
 export function normalizeDoi(value) {
   const doi = typeof value === 'string' ? value.trim().replace(/^https?:\/\/(?:dx\.)?doi\.org\//i, '') : '';

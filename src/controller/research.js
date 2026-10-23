@@ -1,9 +1,11 @@
 // 세부 검색·선택·공개 원문·총정리 동작. 사이트는 AI를 호출하지 않는다.
-import { S, ranked, meta, paperById, scopeText } from '../state/store.js';
+import { S, paperById, scopeText } from '../state/store.js';
 import { $, render } from './render.js';
 import { scheduleSave } from './persist.js';
 import { refineSearch } from './session.js';
-import { applyRefine, splitTerms } from '../research/refine.js';
+import { applyRefine, splitTerms, yearOrNull } from '../research/refine.js';
+import { autoSelectListed, listedItems } from '../research/list.js';
+import { runBulk } from '../research/bulk.js';
 import { ruleRank, RANK_VERSION } from '../research/rank.js';
 import { suggestKeywords } from '../research/keywords.js';
 import { summaryPrompt, checkSummaryMd, SUMMARY_PROMPT_VERSION } from '../research/summary.js';
@@ -13,10 +15,8 @@ import { saveFulltext, loadFulltext, loadFulltextPdf } from '../repository/idb.j
 
 const touch = () => { scheduleSave(); render(); };
 
-function visibleIds() {
-  const ok = new Set(applyRefine(S.papers, S.refine).visible.map((/** @type {any} */ p) => p.id));
-  const m = meta(S);
-  return ranked(S).items.filter((/** @type {any} */ it) => (!S.branch || m[it.paper.id]?.branches.includes(S.branch)) && ok.has(it.paper.id)).map((/** @type {any} */ it) => it.paper.id);
+function shownIds() {
+  return listedItems(S).map((/** @type {any} */ it) => it.paper.id);
 }
 
 /** 입력칸에 적은 값을 먼저 상태에 반영(다시 그리면 사라지지 않게). */
@@ -25,6 +25,9 @@ function readRefineInputs() {
   if (!f) return;
   S.refine.include = splitTerms(/** @type {any} */ (f.querySelector('[name=include]'))?.value);
   S.refine.exclude = splitTerms(/** @type {any} */ (f.querySelector('[name=exclude]'))?.value);
+  S.refine.yearFrom = yearOrNull(/** @type {any} */ (f.querySelector('[name=yearFrom]'))?.value);
+  S.refine.yearTo = yearOrNull(/** @type {any} */ (f.querySelector('[name=yearTo]'))?.value);
+  S.refine.requireAbstract = !!/** @type {any} */ (f.querySelector('[name=requireAbstract]'))?.checked;
 }
 
 /** 포함어를 핵심어로 반영해 정렬 근거와 일치시킨다. */
@@ -41,13 +44,20 @@ function applyFilterRound() {
   syncCriteria();
   S.refine.released = [];
   const matched = applyRefine(S.papers, S.refine).visible.length;
-  S.refine.rounds.push({ id: `r${S.refine.rounds.length + 1}`, at: new Date().toISOString(), mode: 'filter', include: [...S.refine.include], exclude: [...S.refine.exclude], queries: [], added: 0, matched });
-  S.refineMsg = `${matched}편이 조건에 맞아요. 숨긴 논문은 지우지 않았어요.`;
+  S.refine.rounds.push({ id: `r${S.refine.rounds.length + 1}`, at: new Date().toISOString(), mode: 'filter', include: [...S.refine.include], exclude: [...S.refine.exclude], yearFrom: S.refine.yearFrom, yearTo: S.refine.yearTo, requireAbstract: S.refine.requireAbstract, queries: [], added: 0, matched });
+  autoSelectListed(S);
+  S.refineMsg = `조건에 맞는 논문 ${matched}편 중 ${S.selPapers.length}편을 골랐어요.`;
   touch();
 }
 
 // ---- 원문 ----
 const doiKey = (/** @type {any} */ d) => String(d || '').toLowerCase().replace(/^https?:\/\/(?:dx\.)?doi\.org\//, '');
+
+export async function applyStoredPdf(/** @type {any} */ paper, /** @type {any} */ r) {
+  await storeResult(paper, r);
+  if (paper?.id && !S.selPapers.includes(paper.id)) S.selPapers = [...S.selPapers, paper.id];
+  touch();
+}
 
 async function storeResult(/** @type {any} */ paper, /** @type {any} */ r) {
   const old = S.fulltext[paper.id];
@@ -55,17 +65,94 @@ async function storeResult(/** @type {any} */ paper, /** @type {any} */ r) {
     S.fulltext[paper.id] = { ...old, lastError: r.status }; return;
   }
   const pdf = r.pdfBase64 ? new Blob([Uint8Array.from(atob(r.pdfBase64), c => c.charCodeAt(0))], { type: 'application/pdf' }) : null;
-  const entry = { status: r.status, pageCount: r.pageCount || 0, source: r.source || '', license: r.license || null, sha256: r.sha256 || null, extractor: r.extractor || null, truncatedPages: !!r.truncatedPages, at: new Date().toISOString(), pdfAvailable: !!pdf, pdfBytes: r.pdfBytes || 0, sourceUrl: r.sourceUrl || null, requestedDoi: r.requestedDoi || null, doiVerified: r.doiVerified ?? null };
-  if ((r.status === 'extracted' || r.status === 'scan_only') && r.pages?.length && S.projectId) await saveFulltext(S.projectId, paper.id, r.pages, pdf);
-  else if (r.status === 'extracted' && !S.projectId) entry.status = 'failed';
+  const entry = { status: r.status, pageCount: r.pageCount || 0, source: r.source || '', license: r.license || null, sha256: r.sha256 || null, extractor: r.extractor || null, truncatedPages: !!r.truncatedPages, at: new Date().toISOString(), pdfAvailable: !!pdf, pdfBytes: r.pdfBytes || 0, sourceUrl: r.sourceUrl || null, requestedDoi: r.requestedDoi || null, doiVerified: r.doiVerified ?? null, localFile: typeof r.localFile === 'string' ? r.localFile : null };
+  if ((r.status === 'extracted' || r.status === 'scan_only') && r.pages?.length && S.projectId) {
+    try { await saveFulltext(S.projectId, paper.id, r.pages, pdf); }
+    catch (e) {
+      if (/** @type {any} */ (e)?.code === 'quota') { S.fulltext[paper.id] = { ...entry, status: 'quota', pdfAvailable: false, lastError: 'quota' }; return; }
+      throw e;
+    }
+  } else if (r.status === 'extracted' && !S.projectId) entry.status = 'failed';
   S.fulltext[paper.id] = entry;
 }
 
-async function fetchOne(/** @type {any} */ paper) {
-  const res = await fetch('/api/fulltext/fetch', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ doi: paper.doi || '', urls: candidateUrls(paper), license: paper.fulltext?.license || null }) });
+async function ensureDownloadFolder() {
+  if (!S.projectId) return;
+  await fetch('/api/fulltext/folder', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ projectId: S.projectId }) }).catch(() => {});
+}
+
+async function requestOpen(/** @type {any} */ paper, /** @type {AbortSignal} */ signal) {
+  const projectId = S.projectId;
+  const res = await fetch('/api/fulltext/fetch', { method: 'POST', signal, headers: { 'content-type': 'application/json' }, body: JSON.stringify({ doi: paper.doi || '', urls: candidateUrls(paper), license: paper.fulltext?.license || null, projectId }) });
+  if (signal.aborted || S.projectId !== projectId) return 'aborted';
   const body = await res.json().catch(() => ({}));
   await storeResult(paper, res.ok ? body : { status: 'failed' });
-  return S.fulltext[paper.id].status;
+  return S.fulltext[paper.id]?.status || 'failed';
+}
+
+async function requestScihub(/** @type {any} */ paper, /** @type {AbortSignal} */ signal) {
+  const projectId = S.projectId;
+  const res = await fetch('/api/fulltext/scihub', { method: 'POST', signal, headers: { 'content-type': 'application/json' }, body: JSON.stringify({ doi: paper.doi, projectId }) });
+  if (signal.aborted || S.projectId !== projectId) return 'aborted';
+  const r = await res.json().catch(() => ({ status: 'failed' }));
+  const status = r.status || 'failed';
+  await storeResult(paper, { ...r, status });
+  return S.fulltext[paper.id]?.status || status;
+}
+
+/** @type {AbortController|null} */
+let bulkCtrl = null;
+
+function tally(/** @type {any[]} */ papers) {
+  let ok = 0, fail = 0;
+  for (const p of papers) {
+    const st = S.fulltext[p.id]?.status;
+    if (st === 'extracted' || st === 'scan_only') ok++;
+    else if (st) fail++;
+  }
+  return { ok, fail };
+}
+
+async function bulkToggle() {
+  if (S.fulltextBusy) { bulkCtrl?.abort(); return; }
+  const papers = S.selPapers.map((/** @type {string} */ id) => paperById(id)).filter(Boolean);
+  if (!papers.length) return;
+  await ensureDownloadFolder();
+  const projectId = S.projectId;
+  const ctrl = new AbortController();
+  bulkCtrl = ctrl;
+  S.fulltextBusy = true;
+  S.fulltextProgress = { done: 0, total: papers.length, ok: 0, fail: 0 };
+  S.fulltextMsg = '';
+  render();
+  try {
+    const result = await runBulk({
+      papers,
+      hasText: (/** @type {any} */ p) => ['extracted', 'scan_only'].includes(S.fulltext[p.id]?.status),
+      signal: ctrl.signal,
+      fetchOpen: requestOpen,
+      fetchScihub: (/** @type {any} */ p, /** @type {AbortSignal} */ signal) => p.doi ? requestScihub(p, signal) : Promise.resolve('invalid_doi'),
+      mark: async (/** @type {any} */ p, /** @type {string} */ status) => { if (S.projectId === projectId) await storeResult(p, { status }); },
+      onProgress: (/** @type {any} */ s) => {
+        if (S.projectId !== projectId) return;
+        const n = tally(papers);
+        S.fulltextActive = s.active;
+        S.fulltextProgress = { done: s.done, total: s.total, ok: n.ok, fail: n.fail };
+        render();
+      },
+    });
+    if (S.projectId !== projectId) return;
+    const n = tally(papers);
+    S.fulltextProgress = { ...(S.fulltextProgress || {}), done: result.cancelled ? (S.fulltextProgress?.done || 0) : papers.length, total: papers.length, ok: n.ok, fail: n.fail };
+    S.fulltextMsg = result.cancelled ? '받기를 취소했어요. 그때까지 받은 원문은 유지했어요.'
+      : result.challenge ? `확보 ${n.ok}편. Sci-Hub 로봇 확인이 필요해 나머지는 멈추고 표시만 했어요.`
+      : `확보 ${n.ok}편 · 실패 ${n.fail}편.`;
+  } catch {
+    if (S.projectId === projectId) S.fulltextMsg = '받기를 마치지 못했어요. 이미 받은 원문은 유지했어요.';
+  } finally {
+    if (S.projectId === projectId) { S.fulltextBusy = false; S.fulltextActive = []; touch(); }
+    if (bulkCtrl === ctrl) bulkCtrl = null;
+  }
 }
 
 async function fetchScihub(paper) {
@@ -74,7 +161,8 @@ async function fetchScihub(paper) {
   S.fulltextBusy = true; S.fulltextActive = [paper.id];
   S.fulltextMsg = 'Sci-Hub에서 선택한 논문 1편을 확인하고 있어요.'; render();
   try {
-    const res = await fetch('/api/fulltext/scihub', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ doi: paper.doi }) });
+    await ensureDownloadFolder();
+    const res = await fetch('/api/fulltext/scihub', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ doi: paper.doi, projectId }) });
     const r = await res.json();
     if (S.projectId !== projectId) return;
     const status = r.status || 'failed';
@@ -98,31 +186,35 @@ async function downloadStoredPdf(id) {
 }
 
 async function fetchMany(/** @type {any[]} */ papers) {
-  if (!papers.length) return;
+  if (!papers.length || S.fulltextBusy) return;
+  await ensureDownloadFolder();
+  const ctrl = new AbortController();
+  bulkCtrl = ctrl;
   S.fulltextBusy = true;
   const counts = { ok: 0, none: 0, fail: 0 };
   let done = 0;
   const active = new Set();
   const report = () => {
-    const names = [...active].map((/** @type {any} */ p) => String(p.title || p.id).slice(0, 42));
     S.fulltextActive = [...active].map((/** @type {any} */ p) => p.id);
-    S.fulltextMsg = `${done}/${papers.length}편 확인 · 확보 ${counts.ok} · 공개본 없음 ${counts.none} · 실패 ${counts.fail}${names.length ? ` · 받는 중: ${names.join(' / ')}` : ''}`;
+    S.fulltextProgress = { done, total: papers.length, ok: counts.ok, fail: counts.fail + counts.none };
     render();
   };
   const queue = [...papers];
   const worker = async () => {
-    for (let p = queue.shift(); p; p = queue.shift()) {
+    for (let p = queue.shift(); p && !ctrl.signal.aborted; p = queue.shift()) {
       active.add(p); report();
       let st = 'failed';
-      try { st = await fetchOne(p); } catch { await storeResult(p, { status: 'failed' }); }
+      try { st = await requestOpen(p, ctrl.signal); }
+      catch (e) { if (ctrl.signal.aborted || /** @type {any} */ (e)?.name === 'AbortError') { active.delete(p); return; } await storeResult(p, { status: 'failed' }); }
       active.delete(p); done++;
-      if (st === 'extracted') counts.ok++; else if (st === 'no_candidate' || st === 'not_pdf') counts.none++; else counts.fail++;
+      if (st === 'extracted' || st === 'scan_only') counts.ok++; else if (st === 'no_candidate' || st === 'not_pdf') counts.none++; else counts.fail++;
       report();
     }
   };
   await Promise.all([worker(), worker()]);
   S.fulltextBusy = false; S.fulltextActive = [];
-  S.fulltextMsg = `확보 ${counts.ok} / 공개본 없음 ${counts.none} / 실패·기타 ${counts.fail}. 확보하지 못한 논문은 초록만으로 정리하거나 PDF를 올려 주세요.`;
+  S.fulltextMsg = ctrl.signal.aborted ? '받기를 취소했어요. 그때까지 받은 원문은 유지했어요.' : `확보 ${counts.ok} / 공개본 없음 ${counts.none} / 실패·기타 ${counts.fail}.`;
+  if (bulkCtrl === ctrl) bulkCtrl = null;
   touch();
 }
 
@@ -151,11 +243,11 @@ async function uploadFiles(/** @type {FileList|File[]} */ files, /** @type {stri
 async function buildPrompt(/** @type {string[]} */ ids, /** @type {string} */ previousMd) {
   const papers = ids.map(id => paperById(id)).filter(Boolean);
   const pagesById = /** @type {Record<string, any[]>} */ ({});
-  for (const p of papers) if (S.fulltext[p.id]?.status === 'extracted' && S.projectId) pagesById[p.id] = (await loadFulltext(S.projectId, p.id)) || [];
+  for (const p of papers) if (S.summaryMode === 'text' && S.fulltext[p.id]?.status === 'extracted' && S.projectId) pagesById[p.id] = (await loadFulltext(S.projectId, p.id)) || [];
   const keywords = suggestKeywords(S.papers, { known: [], limit: 10 }).map(k => k.term);
-  S.summaryPrompt = summaryPrompt({ topic: S.input, papers, fulltext: S.fulltext, pagesById, keywords, request: S.summaryRequest, previousMd });
+  S.summaryPrompt = summaryPrompt({ mode: S.summaryMode, topic: S.input, papers, fulltext: S.fulltext, pagesById, keywords, request: S.summaryRequest, previousMd });
   S.summaryCtx = { paperIds: papers.map(p => p.id), promptVersion: SUMMARY_PROMPT_VERSION, at: new Date().toISOString() };
-  try { await navigator.clipboard.writeText(S.summaryPrompt); S.summaryMsg = `프롬프트를 복사했어요(논문 ${papers.length}편). ChatGPT 대화에 붙여 넣으세요. 이 사이트는 전송하지 않았어요. 논문 번호 P1~P${papers.length}가 정리본과 연결돼요.`; }
+  try { await navigator.clipboard.writeText(S.summaryPrompt); S.summaryMsg = `프롬프트를 복사했어요(논문 ${papers.length}편). Gemini 대화에 붙여 넣으세요. ${S.summaryMode === 'text' ? '본문 발췌를 포함했어요.' : 'PDF를 직접 첨부한 뒤 ‘정리 시작’이라고 입력하세요.'}${previousMd && S.summaryMode !== 'text' ? ' 이전 정리본도 .md 저장 후 첨부하세요.' : ''} 이 사이트는 전송하지 않았어요.`; }
   catch { S.summaryMsg = '자동 복사에 실패했어요. 아래 미리보기에서 직접 복사하세요.'; }
   touch();
 }
@@ -261,21 +353,16 @@ export function initResearch() {
     if (!t || t.tagName === 'INPUT' || t.tagName === 'TEXTAREA') return;
     const id = t.dataset.id;
     switch (t.dataset.ract) {
-      case 'select-visible': S.selPapers = [...new Set([...S.selPapers, ...visibleIds()])]; touch(); break;
-      case 'select-none': S.selPapers = []; S.selectMsg = ''; touch(); break;
-      case 'select-top': {
-        const byId = new Map(S.papers.map((/** @type {any} */ p) => [p.id, p]));
-        const pool = visibleIds().map((/** @type {string} */ x) => byId.get(x)).filter((/** @type {any} */ p) => p && !p.relevance?.excluded);
-        pool.sort((/** @type {any} */ a, /** @type {any} */ b) => (b.relevance?.score ?? 0) - (a.relevance?.score ?? 0) || String(a.id).localeCompare(String(b.id)));
-        const top = pool.slice(0, 30);
-        S.selPapers = top.map((/** @type {any} */ p) => p.id);
-        const withAbs = top.filter((/** @type {any} */ p) => p.abstract).length;
-        S.selectMsg = `보이는 ${pool.length}편 중 규칙 점수가 높은 ${top.length}편을 골랐어요(제목·초록의 핵심·포함 단어 일치, 여러 검색 문구에서 발견된 수 기준. 의미 판단이 아니에요). 초록이 있는 논문 ${withAbs}편. 아래 목록에서 빼거나 더할 수 있어요.`;
+      case 'select-toggle': {
+        const ids = shownIds();
+        const all = ids.length > 0 && ids.every((/** @type {string} */ x) => S.selPapers.includes(x));
+        S.selPapers = all ? S.selPapers.filter((/** @type {string} */ x) => !ids.includes(x)) : [...new Set([...S.selPapers, ...ids])];
+        S.selectMsg = '';
         touch(); break; }
       case 'refine-search': readRefineInputs(); await refineSearch(); break;
-      case 'refine-clear': S.refine.include = []; S.refine.exclude = []; S.refine.released = []; S.refineMsg = '조건을 지웠어요. 모든 논문이 다시 보여요.'; touch(); break;
+      case 'refine-clear': S.refine.include = []; S.refine.exclude = []; S.refine.released = []; S.refine.yearFrom = null; S.refine.yearTo = null; S.refine.requireAbstract = false; autoSelectListed(S); S.refineMsg = '조건을 지웠어요.'; touch(); break;
       case 'refine-release': S.refine.released = [...new Set([...S.refine.released, id])]; touch(); break;
-      case 'refine-reapply': { const r = S.refine.rounds.find((/** @type {any} */ x) => x.id === id); if (r) { S.refine.include = [...r.include]; S.refine.exclude = [...r.exclude]; S.refine.released = []; S.refineMsg = '이전 조건을 다시 적용했어요.'; touch(); } break; }
+      case 'refine-reapply': { const r = S.refine.rounds.find((/** @type {any} */ x) => x.id === id); if (r) { S.refine.include = [...r.include]; S.refine.exclude = [...r.exclude]; S.refine.yearFrom = r.yearFrom ?? null; S.refine.yearTo = r.yearTo ?? null; S.refine.requireAbstract = !!r.requireAbstract; S.refine.released = []; autoSelectListed(S); S.refineMsg = '이전 조건을 다시 적용했어요.'; touch(); } break; }
       case 'kw-include': case 'kw-exclude': {
         readRefineInputs();
         const key = t.dataset.ract === 'kw-include' ? 'include' : 'exclude';
@@ -284,8 +371,9 @@ export function initResearch() {
       case 'ft-fetch': { const p = paperById(id); if (p) await fetchMany([p]); break; }
       case 'ft-scihub': { const p = paperById(id); if (p) await fetchScihub(p); break; }
       case 'ft-download': await downloadStoredPdf(id); break;
-      case 'ft-fetch-all': await fetchMany(S.selPapers.map((/** @type {string} */ x) => paperById(x)).filter(Boolean)); break;
+      case 'ft-bulk': case 'ft-fetch-all': await bulkToggle(); break;
       case 'summary-make': await buildPrompt(S.selPapers, ''); break;
+      case 'summary-prompt-dl': if (S.summaryPrompt) download('gemini-instructions.md', S.summaryPrompt); break;
       case 'summary-copy': try { await navigator.clipboard.writeText(S.summaryPrompt); S.summaryMsg = '복사했어요.'; } catch { S.summaryMsg = '복사에 실패했어요. 미리보기에서 직접 복사하세요.'; } render(); break;
       case 'summary-load': { const v = S.summaries.find((/** @type {any} */ x) => x.id === id); if (v) { S.summaryDraft = v.md; S.summaryDraftIds = v.paperIds; render(); } break; }
       case 'summary-dl': { const v = id === '__draft' ? { md: S.summaryDraft } : S.summaries.find((/** @type {any} */ x) => x.id === id); if (v) download('research-summary.md', v.md); break; }
@@ -320,7 +408,7 @@ export function initResearch() {
       const ids = S.summaryCtx?.paperIds?.length ? S.summaryCtx.paperIds : S.selPapers;
       addVersion(md, [...ids], 'external');
       const c = S.summaries[S.summaries.length - 1].checks;
-      S.summaryMsg = `가져왔어요(ChatGPT 초안 · 정확성 미검증). 출처 표시 ${c.refCount}곳, 표 ${c.tables}개, 그림 ${c.mermaid}개.${c.invalidRefs.length ? ` 없는 논문 번호: ${c.invalidRefs.join(', ')}.` : ''}${c.unsourcedParagraphs ? ` 출처 표시가 없는 문단이 약 ${c.unsourcedParagraphs}개 있어요(추정).` : ''}`;
+      S.summaryMsg = `가져왔어요(외부 AI 초안 · 정확성 미검증). 출처 표시 ${c.refCount}곳, 표 ${c.tables}개, 그림 ${c.mermaid}개.${c.invalidRefs.length ? ` 없는 논문 번호: ${c.invalidRefs.join(', ')}.` : ''}${c.unsourcedParagraphs ? ` 출처 표시가 없는 문단이 약 ${c.unsourcedParagraphs}개 있어요(추정).` : ''}`;
       touch();
     }
     if (f.dataset.rform === 'gpt-import') {
@@ -348,6 +436,7 @@ export function initResearch() {
       try { if (!v) localStorage.removeItem('rl.proxy'); else if (v.startsWith('https://')) localStorage.setItem('rl.proxy', v); else { S.fulltextMsg = '프록시 주소는 https://로 시작해야 해요.'; } } catch { /* 저장 불가 */ }
       render();
     }
+    else if (a === 'summary-mode') { S.summaryMode = t.value === 'text' ? 'text' : 'attachments'; S.summaryPrompt = ''; S.summaryMsg = '방식을 바꿨어요. 프롬프트를 다시 만드세요.'; render(); }
     else if (a === 'summary-request') S.summaryRequest = t.value;
     else if (a === 'summary-prompt-edit') S.summaryPrompt = t.value;
     else if (a === 'summary-draft') S.summaryDraft = t.value;

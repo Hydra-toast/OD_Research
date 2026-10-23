@@ -43,7 +43,7 @@ test('뒤로 가기는 이전 조사와 화면으로 돌아간다', async ({ pag
   await startEuv(page);
   const a = projectOf(page.url());
   await page.locator('#brief').fill('ALD High-k');
-  await page.getByRole('button', { name: '조사 방향 정리하기' }).click();
+  await page.getByRole('button', { name: '찾기', exact: true }).click();
   await expect(page.locator('.scope-list')).toContainText('ALD');
   const b = projectOf(page.url());
   expect(b).not.toBe(a);
@@ -166,7 +166,7 @@ test('직접 추가한 논문은 선택해 준비 화면으로 가져간다', as
 test('논문 직접 추가: 검증, 사용자 제공 표시, 새로고침 후 유지', async ({ page }) => {
   await page.goto('/');
   await page.locator('#brief').fill('HBM 패키징');
-  await page.getByRole('button', { name: '조사 방향 정리하기' }).click();
+  await page.getByRole('button', { name: '찾기', exact: true }).click();
   await expect(page.locator('#panel-explore article.paper')).toHaveCount(3);
   await page.getByRole('button', { name: '논문 직접 추가' }).click();
   await page.locator('#add-form').getByRole('button', { name: '추가', exact: true }).click();
@@ -190,6 +190,7 @@ test('논문 직접 추가: 검증, 사용자 제공 표시, 새로고침 후 �
 
 test('예시 문서 보기는 근거 패널을 재사용한다', async ({ page }) => {
   await startEuv(page);
+  await page.locator('article.paper').first().getByText('자세히').click();
   await page.locator('article.paper').first().getByRole('button', { name: '예시 문서 보기' }).click();
   await expect(page.locator('#evidence-panel')).toContainText('가상 예시 문서');
   await expect(page.locator('#evidence-panel')).toContainText('위치 정보 없음');
@@ -251,9 +252,9 @@ test('연속 검색: 먼저 보낸 느린 응답이 나중에 와도 마지막 �
   await page.goto('/');
   await page.evaluate(() => { window.__rl.searchDelays = [900, 0]; });
   await page.locator('#brief').fill('EUV 포토레지스트');
-  await page.getByRole('button', { name: '조사 방향 정리하기' }).click();
+  await page.getByRole('button', { name: '찾기', exact: true }).click();
   await page.locator('#brief').fill('ALD High-k');
-  await page.getByRole('button', { name: '조사 방향 정리하기' }).click();
+  await page.getByRole('button', { name: '찾기', exact: true }).click();
   await expect(page.locator('.scope-list')).toContainText('ALD');
   await page.waitForTimeout(1300);
   await expect(page.locator('.scope-list')).toContainText('ALD');
@@ -299,6 +300,7 @@ async function minContrast(page, selectors) {
 
 test('렌더된 화면의 글자 대비가 4.5:1 이상', async ({ page }) => {
   await startEuv(page);
+  await page.getByText('추가 정보 (선택)').click();
   await page.getByRole('button', { name: '연구실 정보 입력' }).click();
   await page.getByRole('button', { name: '예시 연구실 불러오기' }).click();
   await addPaper(page);

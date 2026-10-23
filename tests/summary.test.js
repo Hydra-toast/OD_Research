@@ -6,9 +6,42 @@ const papers = [
   { id: 'oa:2', doi: null, title: 'Beta film', year: 2021, abstract: null },
 ];
 
+describe('Gemini PDF 첨부용 기본 지시서', () => {
+  it('긴 원문·초록·이전 문서가 기본 프롬프트 길이를 늘리지 않는다', () => {
+    const fixture = { id: 'example:compact', title: '가상 예시 · 실제 논문 아님', doi: null, abstract: 'ABSTRACT_SENTINEL'.repeat(1000) };
+    const args = { papers: [fixture], fulltext: { [fixture.id]: { status: 'extracted', localFile: 'private-folder/sample.pdf' } } };
+    const short = summaryPrompt(args);
+    const long = summaryPrompt({ ...args, pagesById: { [fixture.id]: [{ page: 1, text: 'BODY_SENTINEL'.repeat(2000) }] }, previousMd: 'PREVIOUS_SENTINEL'.repeat(2000) });
+    expect(long).not.toMatch(/ABSTRACT_SENTINEL|BODY_SENTINEL|PREVIOUS_SENTINEL|private-folder/);
+    expect(long).toContain('sample.pdf');
+    expect(long).toContain('DOI: 미확인');
+    expect(long.length - short.length).toBeLessThan(300);
+    expect(long).toContain('첨부 여부는 Gemini에서 확인');
+    expect(long).toContain('정리 시작');
+    expect(long).toContain('메타데이터만 있으면 내용 분류·추천을 보류');
+  });
+  it('번호·DOI·제목을 유지하고 없는 논문과 빈 목록을 표시한다', () => {
+    const p = summaryPrompt({ papers });
+    expect(p).toContain('[P1] Alpha resist | DOI: 10.1/a');
+    expect(p).toContain('[P2] Beta film | DOI: 미확인');
+    expect(p).toContain('연구군 표');
+    expect(p).toContain('입문 읽기 순서');
+    expect(p).toContain('모든 논문');
+    expect(summaryPrompt({ papers: [] })).toContain('논문 없음 — 자료를 요청하세요.');
+  });
+  it('정리 초점을 가장 우선하는 섹션으로 넣고 일반론을 막는다', () => {
+    const p = summaryPrompt({ topic: 'EUV', papers, request: '결함 원인 위주로 2~3편' });
+    expect(p).toContain('## 이번 정리의 초점 (가장 우선)\n결함 원인 위주로 2~3편');
+    expect(p).toContain('"초점 밖"');
+    expect(p.indexOf('## 조사 주제')).toBeLessThan(p.indexOf('## 이번 정리의 초점'));
+    expect(p.indexOf('## 이번 정리의 초점')).toBeLessThan(p.indexOf('## 논문 목록'));
+    expect(summaryPrompt({ papers })).toContain('분야 일반론이나 배경 설명을 늘어놓지 마세요');
+  });
+});
+
 describe('summaryPrompt', () => {
   it('가이드라인·번호·자료 범위를 담고 없는 내용을 지어내지 않게 한다', () => {
-    const p = summaryPrompt({ topic: 'EUV', papers, fulltext: { 'oa:1': { status: 'extracted', pageCount: 2 } }, pagesById: { 'oa:1': [{ page: 1, text: 'Dose was 30 mJ' }, { page: 2, text: 'More' }] }, request: '표 위주로' });
+    const p = summaryPrompt({ mode: 'text', topic: 'EUV', papers, fulltext: { 'oa:1': { status: 'extracted', pageCount: 2 } }, pagesById: { 'oa:1': [{ page: 1, text: 'Dose was 30 mJ' }, { page: 2, text: 'More' }] }, request: '표 위주로' });
     expect(p).toContain('[P1] Alpha resist');
     expect(p).toContain('[P2] Beta film');
     expect(p).toContain('쉬운 한국어');
@@ -22,19 +55,19 @@ describe('summaryPrompt', () => {
     expect(p).toContain('없음(초록을 확보하지 못함)');
   });
   it('초록만 있는 논문에는 원문 발췌를 넣지 않는다', () => {
-    const p = summaryPrompt({ papers, fulltext: { 'oa:1': { status: 'no_candidate' } }, pagesById: {} });
+    const p = summaryPrompt({ mode: 'text', papers, fulltext: { 'oa:1': { status: 'no_candidate' } }, pagesById: {} });
     expect(p).not.toContain('원문 발췌');
     expect(p).toContain('확보하지 못함(no_candidate)');
   });
   it('이전 정리본을 넣으면 변경 내역을 요청한다', () => {
-    const p = summaryPrompt({ papers, previousMd: '# 이전 [P1]' });
+    const p = summaryPrompt({ mode: 'text', papers, previousMd: '# 이전 [P1]' });
     expect(p).toContain('## 변경 내역');
     expect(p).toContain('독립적인 근거가 아닙니다');
     expect(p).toContain('# 이전 [P1]');
   });
   it('새 기본 지침에 분류 근거와 학습 순서를 요청하고 순위·전체 분야 주장과 구분한다', () => {
-    const p = summaryPrompt({ papers });
-    expect(SUMMARY_PROMPT_VERSION).toBe('summary-v2');
+    const p = summaryPrompt({ mode: 'text', papers });
+    expect(SUMMARY_PROMPT_VERSION).toBe('summary-v3-gemini');
     expect(p).toContain(`(${SUMMARY_PROMPT_VERSION})`);
     const headings = ['### 1. 한눈에 보기와 자료 범위', '### 2. 연구군 지도', '### 3. 공통 입문 읽기 순서', '### 4. 관심사별 읽기 경로', '### 5. 핵심 용어', '### 6. 한계와 추가로 필요한 자료', '### 7. 출처 목록'];
     const positions = headings.map(h => p.indexOf(h));
@@ -48,7 +81,7 @@ describe('summaryPrompt', () => {
     expect(p).toContain('외부 논문을 만들어 추가하지 마세요');
   });
   it('실제 전달 가능한 텍스트로만 근거 수준을 집계한다', () => {
-    const p = summaryPrompt({
+    const p = summaryPrompt({ mode: 'text',
       papers: [...papers, { id: 'example:empty', title: '가상 예시 · 실제 논문 아님', abstract: ' \n ' }],
       fulltext: { 'oa:1': { status: 'extracted' }, 'oa:2': { status: 'failed' }, 'example:empty': { status: 'extracted' } },
       pagesById: { 'oa:1': [{ page: 1, text: '  ' }], 'oa:2': [{ page: 1, text: '실패 상태의 본문' }] },
@@ -62,7 +95,7 @@ describe('summaryPrompt', () => {
   });
   it('0편·1편도 처리하며 연구군·읽기 경로를 억지로 채우지 않게 한다', () => {
     for (const selected of [[], [papers[1]]]) {
-      const p = summaryPrompt({ papers: selected });
+      const p = summaryPrompt({ mode: 'text', papers: selected });
       expect(p).toContain(`논문 ${selected.length}편 중`);
       expect(p).toContain('논문이 없으면 분석 불가');
       expect(p).toContain('한 편뿐이면 그 논문의 접근법만');

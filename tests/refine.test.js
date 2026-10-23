@@ -30,6 +30,20 @@ describe('refine', () => {
     expect(m.added).toBe(1);
     expect(m.papers[0].foundBy).toEqual(['q1', 'q2']);
   });
+  it('연도가 없으면 연도 조건에서 숨기고, 초록이 없으면 초록 조건에서 숨긴다', () => {
+    const dated = [
+      { id: 'a', title: 'A', abstract: 'hello there', year: 2018 },
+      { id: 'b', title: 'B', abstract: 'hello there', year: 2022 },
+      { id: 'c', title: 'C', abstract: '', year: 2021 },
+      { id: 'd', title: 'D', abstract: 'hello there' },
+    ];
+    const years = applyRefine(dated, { yearFrom: 2020, yearTo: 2023 });
+    expect(years.visible.map(p => p.id)).toEqual(['b', 'c']);
+    const hiddenD = years.hidden.find(h => h.paper.id === 'd');
+    expect(hiddenD?.reasons).toContain('연도 없음');
+    expect(hiddenD?.canRelease).toBe(false);
+    expect(applyRefine(dated, { requireAbstract: true }).visible.map(p => p.id)).toEqual(['a', 'b', 'd']);
+  });
   it('검색 문구에 포함어를 붙이고 단어를 나눈다', () => {
     expect(refinedQueries(['solar cell'], ['perovskite'])).toEqual(['solar cell perovskite']);
     expect(splitTerms('a, bb\nccc;bb')).toEqual(['bb', 'ccc']);
