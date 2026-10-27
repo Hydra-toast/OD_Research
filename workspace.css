@@ -268,19 +268,35 @@ body[data-layout="workspace"] .pw-title-btn:hover {
 }
 
 body[data-layout="workspace"] .pw-row-bottom {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 6px;
   padding-left: 28px;
 }
 
 body[data-layout="workspace"] .pw-row-actions {
-  display: inline-flex;
+  display: flex;
+  justify-content: flex-end;
   align-items: center;
   gap: 6px;
   flex-wrap: wrap;
+  min-width: 0;
+}
+
+body[data-layout="workspace"] .pw-row-actions .paper-end {
+  min-width: 0;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  white-space: normal;
+}
+
+body[data-layout="workspace"] .pw-row-actions .tag {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+body[data-layout="workspace"] .pw-compare-btn {
+  flex: 0 0 auto;
 }
 
 body[data-layout="workspace"] .pw-author-year {

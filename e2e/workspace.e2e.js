@@ -1,5 +1,47 @@
 import { test, expect } from '@playwright/test';
 
+function fixturePdf(text) {
+  const stream = `BT /F1 12 Tf 50 700 Td (${text}) Tj ET`;
+  const objects = ['<< /Type /Catalog /Pages 2 0 R >>', '<< /Type /Pages /Kids [3 0 R] /Count 1 >>', '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>', `<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`, '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>'];
+  let pdf = '%PDF-1.4\n'; const offsets = [];
+  objects.forEach((object, i) => { offsets.push(pdf.length); pdf += `${i + 1} 0 obj\n${object}\nendobj\n`; });
+  const x = pdf.length;
+  pdf += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n${offsets.map(o => String(o).padStart(10, '0') + ' 00000 n \n').join('')}trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${x}\n%%EOF`;
+  return Buffer.from(pdf, 'latin1');
+}
+
+test('선택한 PC 폴더에 PDF를 저장하고 PDF 본문의 DOI로 연결한다', async ({ page }) => {
+  const pdf = fixturePdf('Example article DOI 10.1234/fixture.123 for testing.');
+  await page.addInitScript(() => {
+    class Dir {
+      constructor(name) { this.name = name; this.kind = 'directory'; this.entries = new Map(); }
+      async getDirectoryHandle(name, options) { if (!this.entries.has(name) && options?.create) this.entries.set(name, new Dir(name)); return this.entries.get(name); }
+      async getFileHandle(name, options) {
+        if (!this.entries.has(name) && !options?.create) throw new DOMException('missing', 'NotFoundError');
+        if (!this.entries.has(name)) { const entry = { name, kind: 'file', blob: new Blob([]), async getFile() { return new File([this.blob], name, { type: 'application/pdf' }); }, async createWritable() { return { write: async b => { entry.blob = b; }, close: async () => {}, abort: async () => {} }; } }; this.entries.set(name, entry); }
+        return this.entries.get(name);
+      }
+      async *values() { yield* this.entries.values(); }
+    }
+    window.showDirectoryPicker = async () => new Dir('Downloads');
+  });
+  await page.route('**/api/fulltext/fetch', r => r.fulfill({ json: { status: 'extracted', source: 'fixture', pageCount: 1, pages: [{ page: 1, text: 'Example article DOI 10.1234/fixture.123 for testing.' }], pdfBase64: pdf.toString('base64') } }));
+  await searchFixture(page);
+  await page.evaluate(async () => { const { S } = await import('/src/state/store.js'); S.papers[0].origin = 'provider'; S.papers[0].doi = '10.1234/fixture.123'; });
+  await page.locator('#nav-settings').click();
+  await page.locator('[data-ract="folder-select"]').click();
+  await expect(page.locator('#folder-status')).toContainText('Research Landscape/');
+  await page.locator('#nav-workspace-main').click();
+  await page.locator('.pw-paper-row').first().locator('[data-pact="open-detail"]').click();
+  await page.getByRole('button', { name: '공개 원문 받기', exact: true }).click();
+  await expect.poll(() => page.evaluate(async () => { const { folderState: f } = await import('/src/controller/folder-state.js'); let n = 0; for await (const _ of f.directory.values()) n++; return n; })).toBe(1);
+  await page.evaluate(async () => { const { folderState: f } = await import('/src/controller/folder-state.js'); const [key, entry] = f.directory.entries.entries().next().value; f.directory.entries.delete(key); entry.name = '이름이 다른 파일.pdf'; f.directory.entries.set(entry.name, entry); });
+  await page.locator('#nav-settings').click();
+  await page.locator('[data-ract="folder-scan"]').click();
+  await expect(page.locator('#folder-status')).toContainText('1개 PDF 확인', { timeout: 20000 });
+  await expect(page.getByText('DOI 일치 · 연결됨')).toBeVisible();
+});
+
 // 실제 논문·DOI가 없는 가상 자료. 실검색 저장 스키마의 사용자 자료 ID로 검사한다.
 const papers = Array.from({ length: 30 }, (_, i) => ({
   id: `user:example-workspace-${i}`, providerId: null, doi: null,
@@ -42,6 +84,31 @@ test('검색 꺼짐을 가상 검색 성공으로 대체하지 않는다', async
   await page.getByRole('button', { name: '찾기', exact: true }).click();
   await expect(page.locator('#panel-explore')).toContainText('검색 서버에 연결되지 않았어요');
   await expect(page.locator('.pw-paper-row')).toHaveCount(0);
+});
+test('논문 상태와 비교 버튼은 화면 폭에 맞춰 오른쪽 정렬하고 경고 표시는 한 번만 나온다', async ({ page }) => {
+  await searchFixture(page);
+  await page.evaluate(async () => {
+    const { S } = await import('/src/state/store.js');
+    const { render } = await import('/src/controller/render.js');
+    S.papers[0].origin = 'provider';
+    S.fulltext[S.papers[0].id] = { status: 'challenge_required' };
+    render();
+  });
+  for (const width of [1440, 375]) {
+    await page.setViewportSize({ width, height: 900 });
+    const row = page.locator('.pw-paper-row').first();
+    const status = row.locator('.paper-end');
+    const compare = row.locator('.pw-compare-btn');
+    await expect(status.locator('.tag.warn .ico')).toHaveCount(1);
+    await expect(status.locator('.ft-mark.warn')).toHaveCount(0);
+    const rowBox = await row.boundingBox();
+    const statusBox = await status.boundingBox();
+    const compareBox = await compare.boundingBox();
+    expect(Math.abs((rowBox.x + rowBox.width - 14) - (compareBox.x + compareBox.width))).toBeLessThan(3);
+    expect(statusBox.x).toBeGreaterThanOrEqual(rowBox.x);
+    expect(statusBox.x + statusBox.width).toBeLessThanOrEqual(rowBox.x + rowBox.width);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  }
 });
 test('보관한 PDF를 현재 PC의 브라우저 다운로드로 저장한다', async ({ page }) => {
   await searchFixture(page);

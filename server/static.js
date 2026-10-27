@@ -2,7 +2,7 @@
 import { readFile } from 'node:fs/promises';
 import { extname, join, normalize, resolve, sep } from 'node:path';
 
-const TYPES = { '.html': 'text/html;charset=utf-8', '.css': 'text/css;charset=utf-8', '.js': 'text/javascript;charset=utf-8' };
+const TYPES = { '.html': 'text/html;charset=utf-8', '.css': 'text/css;charset=utf-8', '.js': 'text/javascript;charset=utf-8', '.mjs': 'text/javascript;charset=utf-8' };
 
 /** @param {string} pathname */
 export function isPublicPath(pathname) {
@@ -11,6 +11,7 @@ export function isPublicPath(pathname) {
   try { decoded = decodeURIComponent(pathname); } catch { return false; }
   if (decoded !== pathname || decoded.includes('..') || decoded.includes('\\')) return false;
   if (pathname === '/' || pathname === '/index.html' || pathname === '/styles.css' || pathname === '/parallel.html' || pathname === '/workspace.css') return true;
+  if (pathname === '/src/vendor/pdf.min.mjs' || pathname === '/src/vendor/pdf.worker.min.mjs') return true;
   return /^\/src\/[A-Za-z0-9._/-]+\.js$/.test(pathname);
 }
 

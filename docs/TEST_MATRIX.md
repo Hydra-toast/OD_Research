@@ -1,5 +1,9 @@
 ﻿# 검증 매트릭스
 
+## 2026-10-28 사용자 선택 PDF 폴더
+
+checkJs, Vitest 210개와 workspace Chrome E2E 9개 통과. 모의 파일 시스템·가상 PDF로 저장과 파일명 변경 후 DOI 연결 검사. 실제 OS 폴더 권한·파일 저장 및 공개 배포는 미검증. `data/inbox-pdfs` 삭제 확인.
+
 ## 2026-10-28 Sci-Hub kr 후보
 
 checkJs, Sci-Hub·fulltext Vitest 22개 통과. 세 번째 후보 성공은 가상 응답. 실제 홈페이지 HTTP 200, DOI 한 건은 로봇 확인 화면으로 PDF 미확보. 공개 사이트 Sci-Hub API 404 및 배포 미실행.

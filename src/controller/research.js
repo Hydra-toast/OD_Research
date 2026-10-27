@@ -12,6 +12,7 @@ import { summaryPrompt, checkSummaryMd, SUMMARY_PROMPT_VERSION } from '../resear
 import { buildHandoff, parseHandoff, pickPapers, basisVersion } from '../research/handoff.js';
 import { candidateUrls, ftLabel } from '../views/research.js';
 import { saveFulltext, loadFulltext, loadFulltextPdf } from '../repository/idb.js';
+import { savePdfToFolder } from './folder.js';
 
 const touch = () => { scheduleSave(); render(); };
 
@@ -76,7 +77,9 @@ async function storeResult(/** @type {any} */ paper, /** @type {any} */ r, downl
     S.fulltext[paper.id] = { ...old, lastError: r.status }; return;
   }
   if (downloadPdf && r.pdfBase64 && ['extracted', 'scan_only'].includes(r.status)) {
-    downloadPdfBlob(new Blob([Uint8Array.from(atob(r.pdfBase64), c => c.charCodeAt(0))], { type: 'application/pdf' }), paper);
+    const pdf = new Blob([Uint8Array.from(atob(r.pdfBase64), c => c.charCodeAt(0))], { type: 'application/pdf' });
+    try { if (!(await savePdfToFolder(pdf, paper))) downloadPdfBlob(pdf, paper); }
+    catch { downloadPdfBlob(pdf, paper); S.fulltextMsg = '선택한 폴더에 저장하지 못해 브라우저 다운로드를 요청했습니다.'; }
   }
   // 예전에 보관한 PDF는 덮어쓰지 않으며 새 PDF는 브라우저 DB에 넣지 않는다.
   const legacyPdf = S.projectId ? await loadFulltextPdf(S.projectId, paper.id) : null;

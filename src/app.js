@@ -7,13 +7,13 @@ import { render, renderSaved } from './controller/render.js';
 import { initFromUrl, handlePopState } from './controller/session.js';
 import { initAccount } from './controller/account.js';
 import { loadRuntime } from './controller/runtime.js';
-import { initInbox } from './controller/inbox.js';
+import { initFolder } from './controller/folder.js';
 
 initLanding();
 initEvents();
 initResearch();
 initWorkspace();
-initInbox();
+initFolder();
 window.addEventListener('popstate', () => { handlePopState(); });
 render();
 renderSaved();

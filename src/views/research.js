@@ -44,7 +44,7 @@ export function fulltextLine(S, p) {
   const state = receiving ? '원문 받는 중'
     : st ? (st.status === 'extracted' ? `원문 텍스트 ${st.pageCount}쪽 확보` : ftLabel(st.status))
     : (cands.length ? '공개 원문 후보 있음' : '공개 원문 후보 없음');
-  return `<p data-ft-state="${h(p.id)}">${h(state)}${st?.source === '로컬 폴더에서 가져온 PDF' ? ' · 로컬 폴더에서 가져온 PDF' : ''}${isLocalApp() && st?.localFile ? ` · 로컬 서버 보관: data/inbox-pdfs/${h(st.localFile)}` : ''}${st?.lastError ? ` · 최근 시도: ${h(ftLabel(st.lastError))}(기존 자료 유지)` : ''}</p>
+  return `<p data-ft-state="${h(p.id)}">${h(state)}${st?.source === '로컬 폴더에서 가져온 PDF' ? ' · 로컬 폴더에서 가져온 PDF' : ''}${st?.lastError ? ` · 최근 시도: ${h(ftLabel(st.lastError))}(기존 자료 유지)` : ''}</p>
     <div class="row"><button class="btn small" data-ract="ft-fetch" data-id="${h(p.id)}" ${S.fulltextBusy ? 'disabled' : ''}>${receiving ? '받는 중…' : '공개 원문 받기'}</button>
     <button class="btn small" data-ract="ft-scihub" data-id="${h(p.id)}" ${S.fulltextBusy || !p.doi ? 'disabled' : ''}>${challenged ? 'Sci-Hub 다시 시도' : 'Sci-Hub 원문 받기'}</button>
     ${st?.pdfAvailable ? `<button class="btn small" data-ract="ft-download" data-id="${h(p.id)}">이전에 보관한 PDF 다운로드</button>` : ''}

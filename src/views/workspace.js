@@ -11,12 +11,13 @@ import { meta, ranked, selectedPapers, workspaceComparePapers, paperById } from 
 import { recoveryHtml } from './saved.js';
 import { labSection } from './explore.js';
 import {
-  fulltextLine, chatgptPanel, inboxPanel, ftLabel, proxyPrefix,
+  fulltextLine, chatgptPanel, ftLabel, proxyPrefix,
 } from './research.js';
 import { listedItems, matchedItems, workspaceVisibleItems, EXAMPLE_CAP, LIST_CAP } from '../research/list.js';
 import { applyRefine } from '../research/refine.js';
 import { suggestKeywords } from '../research/keywords.js';
 import { SUMMARY_PROMPT_VERSION } from '../research/summary.js';
+import { folderState } from '../controller/folder-state.js';
 
 const TASK_LABEL = {
   detail: '논문 상세',
@@ -72,7 +73,6 @@ export function workspaceHeaderHtml(S) {
   const got = S.selPapers.filter((/** @type {string} */ id) => ['extracted', 'scan_only'].includes(S.fulltext?.[id]?.status)).length;
   const cmpCount = (S.pCompareIds || []).filter((/** @type {string} */ id) => paperById(id, S)).length;
   const modeBadge = S.dataMode === 'real' ? tag('info', '실제 검색 자료') : exampleTag();
-  const alert = inboxAlertInfo(S);
   return `<div class="pw-header-left">
       <div class="pw-topic-row">
         <span class="pw-topic-label">조사 주제</span>
@@ -92,7 +92,6 @@ export function workspaceHeaderHtml(S) {
       </div>
     </div>
     <div class="pw-header-right">
-      ${alert ? `<button type="button" class="btn small pw-inbox-alert" data-pact="open-inbox-alert" data-fk="p-inbox-alert">${h(alert.label)}</button>` : ''}
       <button type="button" class="btn small" data-pact="view-settings" data-fk="p-open-settings">설정·관리</button>
       <button type="button" class="btn small" data-pact="search-edit-toggle" aria-expanded="${!!S.pSearchEditOpen}" aria-controls="hero-section" data-fk="p-search-edit">${S.pSearchEditOpen ? '검색 수정 닫기' : '검색 수정'}</button>
     </div>`;
@@ -237,8 +236,8 @@ function workspaceFtStatus(S, p) {
   }
   const st = S.fulltext?.[p.id]?.status;
   if (st === 'extracted') return `<span class="ft-mark ok" aria-label="원문 확보">✓</span> ${tag('ok', '원문 확보')}`;
-  if (st === 'scan_only') return `<span class="ft-mark warn" aria-label="스캔본 확보">!</span> ${tag('warn', '스캔본 확보')}`;
-  if (st) return `<span class="ft-mark warn" aria-label="${h(ftLabel(st))}">!</span> ${tag('warn', ftLabel(st))}`;
+  if (st === 'scan_only') return tag('warn', '스캔본 확보');
+  if (st) return tag('warn', ftLabel(st));
   return `<span class="ft-mark" aria-label="원문 미시도">–</span> ${accessTag(p)}`;
 }
 
@@ -420,7 +419,7 @@ export function workspaceClusterHtml(S) {
           : missingFt > 0
             ? `<p class="hint">원문 텍스트가 아직 없는 ${missingFt}편은 초록·서지정보 범위로 안내됩니다. 원문이 부족해도 프롬프트 복사와 정리 진행을 막지 않아요.</p>`
             : '<p class="hint">선택한 모든 논문의 원문 텍스트가 확보되어 있습니다.</p>'}
-        <p class="hint">원문을 받으면 PDF 다운로드를 바로 요청합니다. 저장 위치는 이 PC의 브라우저 설정에 따릅니다. 여러 파일을 받을 때는 브라우저가 추가 다운로드 허용을 요청하거나 차단할 수 있으므로 다운로드 목록을 확인하세요.</p>
+        <p class="hint">설정·관리에서 이 PC의 저장 폴더를 선택하면 조사별 폴더에 PDF를 저장합니다. 선택하지 않으면 브라우저 다운로드를 요청합니다.</p>
         <p class="hint">새 PDF 파일은 브라우저에 보관하지 않습니다. 추출한 본문 텍스트는 조사에 저장되며, Gemini 첨부와 AI 독해·사용자 원문 확인은 별도입니다.</p>
         ${S.dataMode === 'real' ? `<div class="row">
           <button class="btn${busy ? '' : ' primary'}" type="button" data-ract="ft-bulk" data-fk="ft-bulk" ${sel || busy ? '' : 'disabled'}>${busy ? '받기 취소' : `${sel}편 원문 모두 받기`}</button>
@@ -714,11 +713,10 @@ function workspaceExportSubView(S) {
  * @param {any} S */
 export function workspaceSettingsHtml(S) {
   const tab = ['inbox', 'lab', 'scope', 'versions'].includes(S.pSettingsTab) ? S.pSettingsTab : 'inbox';
-  const alert = inboxAlertInfo(S);
   const verCount = (S.summaries || []).length;
   const roundCount = (S.refine?.rounds || []).length;
   const tabs = [
-    ['inbox', `PC 연결·PDF 수신함${alert ? ` (${alert.reviewCount || alert.errCount || '!'})` : ''}`],
+    ['inbox', 'PDF 저장 폴더'],
     ['lab', '우리 연구실 정보'],
     ['scope', `조사 기준·범위·검색 기록 (${roundCount})`],
     ['versions', `이전 정리본 관리 (${verCount})`],
@@ -727,7 +725,7 @@ export function workspaceSettingsHtml(S) {
   let body = '';
   if (tab === 'inbox') {
     body = `<div class="stack">
-      ${inboxPanel(S)}
+      <section class="card stack"><h3>PDF 저장 폴더</h3><p class="hint">이 PC에서 다운로드 폴더를 선택하면 그 안에 현재 조사용 폴더를 만듭니다. Chrome 또는 Edge에서 폴더 접근을 허용해 주세요. 다시 접속하면 선택을 다시 해야 합니다.</p><div class="row"><button class="btn" type="button" data-ract="folder-select">저장 폴더 선택</button><button class="btn" type="button" data-ract="folder-scan" ${folderState.busy ? 'disabled' : ''}>${folderState.busy ? '확인 중…' : '선택한 폴더의 PDF 확인'}</button></div><p class="hint" role="status" id="folder-status">${h(folderState.projectId && folderState.projectId !== S.projectId ? '현재 조사에 사용할 폴더를 선택해 주세요.' : folderState.message)}</p>${(folderState.projectId === S.projectId ? folderState.items : []).map((/** @type {any} */ item, /** @type {number} */ i) => `<div class="card stack"><strong>${h(item.name)}</strong><span>${h(item.status)}</span>${!item.paperId && item.pages.length ? `<label>연결할 논문<select data-folder-pick="${i}"><option value="">논문 선택</option>${(S.papers || []).map((/** @type {any} */ p) => `<option value="${h(p.id)}">${h(p.title)}</option>`).join('')}</select></label><button class="btn small" type="button" data-ract="folder-link" data-index="${i}">이 논문에 연결</button>` : ''}</div>`).join('')}</section>
       <section class="card stack">
         <h3>도서관 프록시 설정</h3>
         <label>도서관 주소 앞부분<input type="text" data-ract="proxy-set" value="${h(proxyPrefix())}" placeholder="https://"></label>
