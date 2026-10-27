@@ -1,11 +1,11 @@
 // 세부 검색·선택·공개 원문·총정리 동작. 사이트는 AI를 호출하지 않는다.
 import { S, paperById, scopeText } from '../state/store.js';
-import { $, render } from './render.js';
+import { $, render, isWorkspaceLayout } from './render.js';
 import { scheduleSave } from './persist.js';
 import { pdfFolderName, safePdfFolder, savedPdfFolder } from '../research/pdf-folder.js';
 import { refineSearch } from './session.js';
 import { applyRefine, splitTerms, yearOrNull } from '../research/refine.js';
-import { autoSelectListed, listedItems } from '../research/list.js';
+import { autoSelectListed, listedItems, workspaceVisibleItems } from '../research/list.js';
 import { runBulk } from '../research/bulk.js';
 import { ruleRank, RANK_VERSION } from '../research/rank.js';
 import { suggestKeywords } from '../research/keywords.js';
@@ -17,7 +17,8 @@ import { saveFulltext, loadFulltext, loadFulltextPdf } from '../repository/idb.j
 const touch = () => { scheduleSave(); render(); };
 
 function shownIds() {
-  return listedItems(S).map((/** @type {any} */ it) => it.paper.id);
+  const items = isWorkspaceLayout() ? workspaceVisibleItems(S) : listedItems(S);
+  return items.map((/** @type {any} */ it) => it.paper.id);
 }
 
 /** 입력칸에 적은 값을 먼저 상태에 반영(다시 그리면 사라지지 않게). */
@@ -46,8 +47,12 @@ function applyFilterRound() {
   S.refine.released = [];
   const matched = applyRefine(S.papers, S.refine).visible.length;
   S.refine.rounds.push({ id: `r${S.refine.rounds.length + 1}`, at: new Date().toISOString(), mode: 'filter', include: [...S.refine.include], exclude: [...S.refine.exclude], yearFrom: S.refine.yearFrom, yearTo: S.refine.yearTo, requireAbstract: S.refine.requireAbstract, queries: [], added: 0, matched });
-  autoSelectListed(S);
-  S.refineMsg = `조건에 맞는 논문 ${matched}편 중 ${S.selPapers.length}편을 골랐어요.`;
+  if (!isWorkspaceLayout()) {
+    autoSelectListed(S);
+    S.refineMsg = `조건에 맞는 논문 ${matched}편 중 ${S.selPapers.length}편을 골랐어요.`;
+  } else {
+    S.refineMsg = `조건에 맞는 논문 ${matched}편을 표시해요. 기존 선택 ${S.selPapers.length}편은 그대로 유지했어요.`;
+  }
   touch();
 }
 
@@ -126,7 +131,7 @@ function tally(/** @type {any[]} */ papers) {
   return { ok, fail };
 }
 
-async function bulkToggle() {
+export async function bulkToggle() {
   if (S.fulltextBusy) { bulkCtrl?.abort(); return; }
   const papers = S.selPapers.map((/** @type {string} */ id) => paperById(id)).filter(Boolean);
   if (!papers.length) return;
@@ -253,7 +258,7 @@ async function uploadFiles(/** @type {FileList|File[]} */ files, /** @type {stri
 }
 
 // ---- 총정리 ----
-async function buildPrompt(/** @type {string[]} */ ids, /** @type {string} */ previousMd) {
+export async function buildPrompt(/** @type {string[]} */ ids, /** @type {string} */ previousMd) {
   const papers = ids.map(id => paperById(id)).filter(Boolean);
   const pagesById = /** @type {Record<string, any[]>} */ ({});
   for (const p of papers) if (S.summaryMode === 'text' && S.fulltext[p.id]?.status === 'extracted' && S.projectId) pagesById[p.id] = (await loadFulltext(S.projectId, p.id)) || [];
@@ -261,7 +266,7 @@ async function buildPrompt(/** @type {string[]} */ ids, /** @type {string} */ pr
   S.summaryPrompt = summaryPrompt({ mode: S.summaryMode, topic: S.input, papers, fulltext: S.fulltext, pagesById, keywords, request: S.summaryRequest, previousMd });
   S.summaryCtx = { paperIds: papers.map(p => p.id), promptVersion: SUMMARY_PROMPT_VERSION, at: new Date().toISOString() };
   try { await navigator.clipboard.writeText(S.summaryPrompt); S.summaryMsg = `프롬프트를 복사했어요(논문 ${papers.length}편). Gemini 대화에 붙여 넣으세요. ${S.summaryMode === 'text' ? '본문 발췌를 포함했어요.' : 'PDF를 직접 첨부한 뒤 ‘정리 시작’이라고 입력하세요.'}${previousMd && S.summaryMode !== 'text' ? ' 이전 정리본도 .md 저장 후 첨부하세요.' : ''} 이 사이트는 전송하지 않았어요.`; }
-  catch { S.summaryMsg = '자동 복사에 실패했어요. 아래 미리보기에서 직접 복사하세요.'; }
+  catch { S.pPromptPreviewOpen = true; S.summaryMsg = '자동 복사에 실패했어요. 아래 미리보기에서 직접 복사하세요.'; }
   touch();
 }
 
@@ -373,9 +378,24 @@ export function initResearch() {
         S.selectMsg = '';
         touch(); break; }
       case 'refine-search': readRefineInputs(); await refineSearch(); break;
-      case 'refine-clear': S.refine.include = []; S.refine.exclude = []; S.refine.released = []; S.refine.yearFrom = null; S.refine.yearTo = null; S.refine.requireAbstract = false; autoSelectListed(S); S.refineMsg = '조건을 지웠어요.'; touch(); break;
+      case 'refine-clear':
+        for (const key of Object.keys(S.pFormDrafts || {})) if (key.startsWith('form[data-rform="refine"]:')) delete S.pFormDrafts[key];
+        S.refine.include = []; S.refine.exclude = []; S.refine.released = []; S.refine.yearFrom = null; S.refine.yearTo = null; S.refine.requireAbstract = false;
+        if (!isWorkspaceLayout()) autoSelectListed(S);
+        S.refineMsg = isWorkspaceLayout() ? `조건을 지웠어요. 기존 선택 ${S.selPapers.length}편은 그대로 유지했어요.` : '조건을 지웠어요.';
+        touch(); break;
       case 'refine-release': S.refine.released = [...new Set([...S.refine.released, id])]; touch(); break;
-      case 'refine-reapply': { const r = S.refine.rounds.find((/** @type {any} */ x) => x.id === id); if (r) { S.refine.include = [...r.include]; S.refine.exclude = [...r.exclude]; S.refine.yearFrom = r.yearFrom ?? null; S.refine.yearTo = r.yearTo ?? null; S.refine.requireAbstract = !!r.requireAbstract; S.refine.released = []; autoSelectListed(S); S.refineMsg = '이전 조건을 다시 적용했어요.'; touch(); } break; }
+      case 'refine-reapply': {
+        const r = S.refine.rounds.find((/** @type {any} */ x) => x.id === id);
+        if (r) {
+          for (const key of Object.keys(S.pFormDrafts || {})) if (key.startsWith('form[data-rform="refine"]:')) delete S.pFormDrafts[key];
+          S.refine.include = [...r.include]; S.refine.exclude = [...r.exclude]; S.refine.yearFrom = r.yearFrom ?? null; S.refine.yearTo = r.yearTo ?? null; S.refine.requireAbstract = !!r.requireAbstract; S.refine.released = [];
+          if (!isWorkspaceLayout()) autoSelectListed(S);
+          S.refineMsg = isWorkspaceLayout() ? `이전 조건을 다시 적용했어요. 기존 선택 ${S.selPapers.length}편은 유지했어요.` : '이전 조건을 다시 적용했어요.';
+          if (isWorkspaceLayout()) S.pView = 'main';
+          touch();
+        }
+        break; }
       case 'kw-include': case 'kw-exclude': {
         readRefineInputs();
         const key = t.dataset.ract === 'kw-include' ? 'include' : 'exclude';
@@ -387,14 +407,35 @@ export function initResearch() {
       case 'ft-bulk': case 'ft-fetch-all': await bulkToggle(); break;
       case 'summary-make': await buildPrompt(S.selPapers, ''); break;
       case 'summary-prompt-dl': if (S.summaryPrompt) download('gemini-instructions.md', S.summaryPrompt); break;
-      case 'summary-copy': try { await navigator.clipboard.writeText(S.summaryPrompt); S.summaryMsg = '복사했어요.'; } catch { S.summaryMsg = '복사에 실패했어요. 미리보기에서 직접 복사하세요.'; } render(); break;
-      case 'summary-load': { const v = S.summaries.find((/** @type {any} */ x) => x.id === id); if (v) { S.summaryDraft = v.md; S.summaryDraftIds = v.paperIds; render(); } break; }
+      case 'summary-copy': try { await navigator.clipboard.writeText(S.summaryPrompt); S.summaryMsg = '복사했어요.'; } catch { S.pPromptPreviewOpen = true; S.summaryMsg = '복사에 실패했어요. 미리보기에서 직접 복사하세요.'; } render(); break;
+      case 'summary-load': {
+        const v = S.summaries.find((/** @type {any} */ x) => x.id === id);
+        if (v) {
+          S.summaryDraft = v.md;
+          S.summaryDraftIds = v.paperIds;
+          if (isWorkspaceLayout()) {
+            S.pSummaryViewMode = 'edit';
+            S.pView = 'main';
+            S.pTask = 'cluster';
+            S.summaryMsg = `${v.at.slice(0, 16).replace('T', ' ')} 정리본을 편집창에 불러왔어요.`;
+          }
+          render();
+        }
+        break; }
       case 'summary-dl': { const v = id === '__draft' ? { md: S.summaryDraft } : S.summaries.find((/** @type {any} */ x) => x.id === id); if (v) download('research-summary.md', v.md); break; }
-      case 'summary-save-draft': if (S.summaryDraft.trim()) { addVersion(S.summaryDraft, S.summaryDraftIds.length ? S.summaryDraftIds : S.selPapers, 'user'); S.summaryMsg = '새 버전으로 저장했어요.'; touch(); } break;
+      case 'summary-save-draft':
+        if (S.summaryDraft.trim()) {
+          addVersion(S.summaryDraft, S.summaryDraftIds.length ? S.summaryDraftIds : S.selPapers, 'user');
+          if (isWorkspaceLayout()) S.pSummaryViewMode = 'read';
+          S.summaryMsg = '새 버전으로 저장했어요.';
+          touch();
+        }
+        break;
       case 'summary-develop': {
         const v = S.summaries.find((/** @type {any} */ x) => x.id === id); if (!v) break;
         const keep = v.paperIds.filter((/** @type {string} */ x) => paperById(x));
         const extra = S.selPapers.filter((/** @type {string} */ x) => !keep.includes(x));
+        if (isWorkspaceLayout()) { S.pView = 'main'; S.pTask = 'cluster'; }
         await buildPrompt([...keep, ...extra], v.md);
         break; }
       case 'gpt-build': await buildGpt(); break;
@@ -414,12 +455,45 @@ export function initResearch() {
     e.preventDefault();
     if (f.dataset.rform === 'refine') applyFilterRound();
     if (f.dataset.rform === 'summary-import') {
-      let md = String(f.querySelector('[name=md]')?.value || '');
+      const rawPaste = String(f.querySelector('[name=md]')?.value || '');
+      let md = rawPaste;
       const file = f.querySelector('[name=file]')?.files?.[0];
-      if (file) md = await file.text();
-      if (!md.trim()) { S.summaryMsg = '가져올 .md 내용이 없어요.'; render(); return; }
+      if (file) {
+        try { md = await file.text(); }
+        catch {
+          S.pFormDrafts ??= {};
+          S.pFormDrafts['summary-import:md'] = rawPaste;
+          S.summaryMsg = '파일을 읽지 못했어요. 입력한 원문과 기존 정리 결과는 그대로 보존했어요.';
+          render();
+          return;
+        }
+      }
+      if (!md.trim() || md.includes('\0')) {
+        S.pFormDrafts ??= {};
+        S.pFormDrafts['summary-import:md'] = rawPaste;
+        S.summaryMsg = md.includes('\0')
+          ? '텍스트(.md) 형식이 아닌 파일이에요. 입력한 원문과 기존 정리 결과는 그대로 보존했어요.'
+          : '가져올 .md 내용이 없어요. 기존 정리 결과는 그대로 보존했어요.';
+        render();
+        return;
+      }
       const ids = S.summaryCtx?.paperIds?.length ? S.summaryCtx.paperIds : S.selPapers;
+      const checks = checkSummaryMd(md, ids.length);
+      if (isWorkspaceLayout() && checks.invalidRefs.length > 0) {
+        S.pFormDrafts ??= {};
+        S.pFormDrafts['summary-import:md'] = md;
+        S.pSummaryImportOpen = true;
+        S.summaryMsg = `가져오지 못했어요: 대상 논문(${ids.length}편) 범위를 벗어난 참조(${checks.invalidRefs.join(', ')})가 있어요. 입력한 원문과 기존 정리 결과는 덮어쓰지 않고 보존했어요.`;
+        render();
+        return;
+      }
       addVersion(md, [...ids], 'external');
+      f.reset();
+      if (S.pFormDrafts) delete S.pFormDrafts['summary-import:md'];
+      if (isWorkspaceLayout()) {
+        S.pSummaryViewMode = 'read';
+        S.pSummaryImportOpen = false;
+      }
       const c = S.summaries[S.summaries.length - 1].checks;
       S.summaryMsg = `가져왔어요(외부 AI 초안 · 정확성 미검증). 출처 표시 ${c.refCount}곳, 표 ${c.tables}개, 그림 ${c.mermaid}개.${c.invalidRefs.length ? ` 없는 논문 번호: ${c.invalidRefs.join(', ')}.` : ''}${c.unsourcedParagraphs ? ` 출처 표시가 없는 문단이 약 ${c.unsourcedParagraphs}개 있어요(추정).` : ''}`;
       touch();
@@ -450,13 +524,28 @@ export function initResearch() {
       render();
     }
     else if (a === 'summary-mode') { S.summaryMode = t.value === 'text' ? 'text' : 'attachments'; S.summaryPrompt = ''; S.summaryMsg = '방식을 바꿨어요. 프롬프트를 다시 만드세요.'; render(); }
-    else if (a === 'summary-request') S.summaryRequest = t.value;
+    else if (a === 'summary-request') { S.summaryRequest = t.value; if (isWorkspaceLayout()) scheduleSave(); }
     else if (a === 'summary-prompt-edit') S.summaryPrompt = t.value;
     else if (a === 'summary-draft') S.summaryDraft = t.value;
     else if (a === 'gpt-purpose') { S.chatgptPurpose = t.value; S.chatgptPending = null; S.chatgptMsg = '목적을 바꿨어요. 프롬프트를 다시 만든 뒤 ChatGPT에 붙여 넣으세요.'; render(); }
     else if (a === 'gpt-focus') S.chatgptFocusId = t.value;
-    else if (a === 'gpt-note') S.chatgptNote = t.value;
+    else if (a === 'gpt-note') { S.chatgptNote = t.value; if (isWorkspaceLayout()) scheduleSave(); }
     else if (a === 'gpt-prompt') S.chatgptPrompt = t.value;
+  });
+
+  document.addEventListener('input', (e) => {
+    const t = /** @type {any} */ (e.target);
+    if (!t) return;
+    const a = t.dataset?.ract;
+    if (a === 'summary-request') { S.summaryRequest = t.value; if (isWorkspaceLayout()) scheduleSave(); }
+    else if (a === 'summary-prompt-edit') S.summaryPrompt = t.value;
+    else if (a === 'summary-draft') S.summaryDraft = t.value;
+    else if (a === 'gpt-note') { S.chatgptNote = t.value; if (isWorkspaceLayout()) scheduleSave(); }
+    else if (a === 'gpt-prompt') S.chatgptPrompt = t.value;
+    else if (isWorkspaceLayout() && t.name === 'md' && t.closest?.('form[data-rform="summary-import"]')) {
+      S.pFormDrafts ??= {};
+      S.pFormDrafts['summary-import:md'] = t.value;
+    }
   });
   void $;
 }

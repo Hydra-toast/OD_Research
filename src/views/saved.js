@@ -3,11 +3,11 @@ import { h, tag, fmtTime } from './common.js';
 
 /** @param {any[]} all */
 export function savedListHtml(all) {
-  if (!all.length) return '<p class="card">아직 저장한 조사가 없어요. 예시 주제로 시작하면 이 브라우저에 자동 저장돼요.</p>';
+  if (!all.length) return '<p class="card">아직 저장한 조사가 없어요. 논문을 검색하고 정리하면 이 브라우저에 자동 저장돼요.</p>';
   return all.map(p => p.corrupt
     ? `<div class="saved-item"><span>${tag('warn', p.readOnly ? '읽기 전용' : '복구 필요')} ${p.readOnly ? '더 새로운 형식으로 저장된 조사예요.' : '저장 데이터가 깨졌어요.'} 삭제하지 않았어요. <span class="hint">(${h(p.name ?? p.id)})</span></span>
        <span class="row" style="margin:0"><button class="btn small" data-act="open-saved" data-id="${h(p.id)}">상태 보기</button><button class="btn small" data-act="raw-export" data-id="${h(p.id)}">원본 내보내기</button>${p.readOnly ? '' : `<button class="btn small" data-act="delete-saved" data-id="${h(p.id)}" data-name="${h(p.name ?? p.id)}">삭제</button>`}</span></div>`
-    : `<div class="saved-item"><span><strong>${h(p.name)}</strong> <span class="hint">· ${h(p.scope)} · ${h(fmtTime(p.updatedAt))}</span></span>
+    : `<div class="saved-item"><span><strong>${h(p.name)}</strong> ${p.dataMode === 'example' ? tag('example', '가상 예시 · 실제 논문 아님') : ''} <span class="hint">· ${h(p.scope)} · ${h(fmtTime(p.updatedAt))}</span></span>
        <span class="row" style="margin:0"><button class="btn small" data-act="open-saved" data-id="${h(p.id)}">열기</button><button class="btn small" data-act="rename-saved" data-id="${h(p.id)}">이름 변경</button><button class="btn small" data-act="delete-saved" data-id="${h(p.id)}" data-name="${h(p.name)}">삭제</button></span></div>`).join('');
 }
 

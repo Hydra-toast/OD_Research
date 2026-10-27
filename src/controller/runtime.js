@@ -7,7 +7,13 @@ export function isLocalApp() {
   return host === 'localhost' || host === '127.0.0.1' || host === '[::1]';
 }
 
-export async function loadRuntime() {
+/** @type {Promise<any>|null} */
+let pendingConfig = null;
+export function loadRuntime() {
+  return pendingConfig ??= readRuntime();
+}
+
+async function readRuntime() {
   try {
     const config = await (await fetch('/api/config')).json();
     runtime.search = !!config.search;

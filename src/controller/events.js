@@ -7,7 +7,7 @@ import {
 } from '../logic.js';
 import { toRecord } from '../state/record.js';
 import { repo } from './deps.js';
-import { $, render, renderEvidence, renderSaved, focusFk } from './render.js';
+import { $, render, renderEvidence, renderSaved, focusFk, isWorkspaceLayout } from './render.js';
 import { scheduleSave, doSave, cancelSave } from './persist.js';
 import { refreshAnalysis } from './analysis.js';
 import { setUrl } from './router.js';
@@ -39,10 +39,11 @@ async function doExport(/** @type {string} */ kind, /** @type {string} */ mode) 
     a.href = URL.createObjectURL(new Blob([text], { type: 'text/markdown;charset=utf-8' }));
     a.download = kind === 'summary' ? 'research-landscape-summary.md' : 'research-landscape-guide.md';
     document.body.append(a); a.click(); a.remove();
-    st.textContent = '파일을 만들었어요.'; return;
+    if (st) st.textContent = '파일을 만들었어요.';
+    return;
   }
-  try { await navigator.clipboard.writeText(text); S.exportText = null; st.textContent = '복사했어요.'; }
-  catch { S.exportText = text; render(); $('#export-status').textContent = '자동 복사에 실패했어요. 아래 텍스트를 직접 선택해 복사하세요.'; $('#export-fallback')?.focus(); $('#export-fallback')?.select(); }
+  try { await navigator.clipboard.writeText(text); S.exportText = null; if (st) st.textContent = '복사했어요.'; }
+  catch { S.exportText = text; render(); if ($('#export-status')) $('#export-status').textContent = '자동 복사에 실패했어요. 아래 텍스트를 직접 선택해 복사하세요.'; $('#export-fallback')?.focus(); $('#export-fallback')?.select(); }
 }
 
 function openEvidence(/** @type {any} */ ev, /** @type {string} */ key) { S.evOpen = { ...ev, key }; renderEvidence(); $('#ev-close').focus(); }
@@ -51,7 +52,14 @@ function closeEvidence() {
   if (key) focusFk(key);
 }
 
-function setTab(/** @type {'explore'|'prepare'} */ tab) { S.tab = tab; setUrl('push'); render(); }
+function setTab(/** @type {'explore'|'prepare'} */ tab) {
+  S.tab = tab;
+  if (isWorkspaceLayout()) {
+    S.pView = 'main'; S.pTask = tab === 'prepare' ? 'utilize' : 'cluster';
+    S.pMobilePane = tab === 'prepare' ? 'work' : 'list';
+  }
+  setUrl('push'); render();
+}
 
 function qAct(/** @type {string} */ kind, /** @type {string} */ claimId) {
   const c = claimByCid(claimId); if (!c) return;
@@ -227,11 +235,22 @@ export function initEvents() {
     }
   });
 
+  document.addEventListener('input', e => {
+    if (!isWorkspaceLayout()) return;
+    const t = /** @type {any} */ (e.target);
+    if (t?.dataset?.act === 'note' && t.dataset.id) {
+      S.notes[t.dataset.id] = t.value;
+      scheduleSave();
+    }
+  });
+
   $('#ev-close').addEventListener('click', closeEvidence);
   document.addEventListener('keydown', e => { if (e.key === 'Escape' && S.evOpen) closeEvidence(); });
-  for (const tab of [$('#tab-explore'), $('#tab-prepare')]) tab.addEventListener('click', () => setTab(tab.id === 'tab-prepare' ? 'prepare' : 'explore'));
-  $('#workspace [role=tablist]').addEventListener('keydown', (/** @type {KeyboardEvent} */ e) => {
-    if (!['ArrowLeft', 'ArrowRight'].includes(e.key)) return;
-    setTab(S.tab === 'explore' ? 'prepare' : 'explore'); $('#tab-' + S.tab).focus();
-  });
+  if (!isWorkspaceLayout()) {
+    for (const tab of [$('#tab-explore'), $('#tab-prepare')]) tab?.addEventListener('click', () => setTab(tab.id === 'tab-prepare' ? 'prepare' : 'explore'));
+    $('#workspace [role=tablist]')?.addEventListener('keydown', (/** @type {KeyboardEvent} */ e) => {
+      if (!['ArrowLeft', 'ArrowRight'].includes(e.key)) return;
+      setTab(S.tab === 'explore' ? 'prepare' : 'explore'); $('#tab-' + S.tab)?.focus();
+    });
+  }
 }

@@ -5,6 +5,8 @@ import { emptyRefine } from '../research/refine.js';
 
 /** @typedef {any} State */
 
+let sessionSeq = 0;
+
 export const fresh = () => ({
   /** idle | loading | ok | empty | error | corrupt | missing */
   status: 'idle', input: '', topicKey: /** @type {string|null} */ (null), papers: /** @type {any[]} */ ([]), warnings: /** @type {string[]} */ ([]),
@@ -26,6 +28,28 @@ export const fresh = () => ({
   fulltext: /** @type {Record<string,any>} */ ({}), pdfFolder: '', fulltextMsg: '', fulltextBusy: false, fulltextActive: /** @type {string[]} */ ([]), fulltextProgress: /** @type {any} */ (null), selectMsg: '', uploadTarget: /** @type {string|null} */ (null),
   inbox: /** @type {any} */ (null),
   analysis: /** @type {any} */ (null), corrupt: /** @type {any} */ (null), readOnly: false, notFoundId: /** @type {string|null} */ (null),
+  // 기본 작업 화면 전용 UI 상태 (저장본 스키마와 분리)
+  pSessionKey: 's-' + (++sessionSeq),
+  pTask: /** @type {'detail'|'cluster'|'utilize'} */ ('cluster'),
+  pDetailId: /** @type {string|null} */ (null),
+  pMobilePane: /** @type {'list'|'work'} */ ('list'),
+  pView: /** @type {'main'|'saved'|'how'|'settings'} */ ('main'),
+  pSearchEditOpen: false,
+  pSearchSnapshot: /** @type {any} */ (null),
+  pFilterOpen: false,
+  pShowSelectedOnly: false,
+  pCompareIds: /** @type {string[]} */ ([]),
+  pCompareMsg: '',
+  pUtilizeSub: /** @type {'compare'|'claims'|'ai'|'export'} */ ('compare'),
+  pPrevTaskBeforeCompare: /** @type {'detail'|'cluster'|'utilize'|null} */ (null),
+  pPrevMobilePaneBeforeCompare: /** @type {'list'|'work'|null} */ (null),
+  pSummaryViewMode: /** @type {'read'|'edit'} */ ('read'),
+  pSummaryImportOpen: false,
+  pPromptPreviewOpen: false,
+  pSettingsTab: /** @type {'inbox'|'lab'|'scope'|'versions'} */ ('inbox'),
+  pListScrollTop: 0,
+  pWorkScrollByTask: /** @type {Record<string,number>} */ ({ detail: 0, cluster: 0, utilize: 0 }),
+  pFormDrafts: /** @type {Record<string,any>} */ ({}),
 });
 
 /** @type {State} */
@@ -58,3 +82,4 @@ export const ranked = (s = S) => rankPapers(s.papers, meta(s), s.scope, s.sort);
 export const paperById = (/** @type {string} */ id, s = S) => s.papers.find((/** @type {any} */ p) => p.id === id);
 export const claimByCid = (/** @type {string} */ cid, s = S) => Object.values(s.claims).find((/** @type {any} */ c) => c.id === cid);
 export const selectedPapers = (s = S) => s.selPapers.map((/** @type {string} */ id) => paperById(id, s)).filter(Boolean);
+export const workspaceComparePapers = (s = S) => (s.pCompareIds || []).map((/** @type {string} */ id) => paperById(id, s)).filter(Boolean);

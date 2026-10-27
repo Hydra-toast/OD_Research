@@ -6,12 +6,12 @@ import { createLatest } from '../logic.js';
 import { createSearchRunner } from '../search-runner.js';
 import { validateRecord, fromRecord } from '../state/record.js';
 import { provider, repo } from './deps.js';
-import { render, renderSaved, showWorkspace, setSave, $ } from './render.js';
+import { render, renderSaved, showWorkspace, setSave, $, isWorkspaceLayout } from './render.js';
 import { scheduleSave, flushSave } from './persist.js';
 import { refreshAnalysis, cancelAnalysis } from './analysis.js';
 import { setUrl, parseUrl } from './router.js';
 import { planQuery } from '../search/terms.js';
-import { runtime } from './runtime.js';
+import { runtime, loadRuntime } from './runtime.js';
 import { ProviderError } from '../providers/contracts.js';
 import { ruleRank, RANK_VERSION } from '../research/rank.js';
 import { applyRefine, mergePool, refinedQueries } from '../research/refine.js';
@@ -21,9 +21,25 @@ import { autoSelectListed } from '../research/list.js';
 let nextUrlMode = /** @type {'push'|'replace'} */ ('push');
 const openLatest = createLatest();
 
+function syncWorkspaceBriefInputs(text = '') {
+  if (!isWorkspaceLayout()) return;
+  const briefEl = /** @type {HTMLTextAreaElement|null} */ ($('#brief'));
+  const fieldEl = /** @type {HTMLInputElement|null} */ ($('#brief-field'));
+  const condEl = /** @type {HTMLInputElement|null} */ ($('#brief-conditions'));
+  const planEl = $('#brief-plan');
+  const errEl = $('#brief-error');
+  if (briefEl) briefEl.value = text;
+  if (fieldEl) fieldEl.value = '';
+  if (condEl) condEl.value = '';
+  if (planEl) planEl.hidden = true;
+  if (errEl) errEl.hidden = true;
+}
+
 const routed = {
   async search(/** @type {string} */ q) {
-    if (!runtime.search || S.forceExample) return provider.search(q);
+    if (S.forceExample) return provider.search(q);
+    await loadRuntime();
+    if (!runtime.search) throw new ProviderError('bad_mode', '논문 검색 서버에 연결되지 않았어요. 서버 설정을 확인한 뒤 다시 시도하세요. 가상 예시는 사용 안내에서 따로 열 수 있어요.');
     S.dataMode = 'real';
     const plan = S.englishOverride ? { ...planQuery(q), english: S.englishOverride, untranslated: [] } : planQuery(q);
     S.queryPlan = plan;
@@ -38,7 +54,16 @@ const routed = {
   },
 };
 const runner = createSearchRunner(routed, {
-  onStart(text) { S.input = text; S.dataMode = runtime.search && !S.forceExample ? 'real' : 'example'; S.status = 'loading'; S.searchError = ''; render(); showWorkspace(); },
+  onStart(text) {
+    S.input = text;
+    S.pSearchEditOpen = false;
+    S.pView = 'main';
+    S.dataMode = S.forceExample ? 'example' : 'real';
+    S.status = 'loading';
+    S.searchError = '';
+    render();
+    showWorkspace();
+  },
   onError(_text, error) { S.searchError = error?.message || '논문을 불러오지 못했어요.'; S.status = 'error'; render(); },
   onResult(text, r) {
     if (r.stale) return;
@@ -71,7 +96,13 @@ const runner = createSearchRunner(routed, {
   },
 });
 
-export function focusHeading() { requestAnimationFrame(() => $('#panel-explore h2')?.focus()); }
+export function focusHeading() {
+  requestAnimationFrame(() => {
+    const h2 = $('#panel-explore h2');
+    if (isWorkspaceLayout()) h2?.focus?.({ preventScroll: true });
+    else h2?.focus?.();
+  });
+}
 
 /** @param {string} text @param {{url?:'push'|'replace', keepPage?: boolean, english?: string, example?:boolean}} [opt] */
 export async function search(text, opt = {}) {
@@ -92,6 +123,8 @@ export async function searchMany(queries, label, criterion) {
   S.inputRevision += 1;
   const revision = S.inputRevision;
   S.input = label;
+  S.pSearchEditOpen = false;
+  S.pView = 'main';
   S.dataMode = 'real';
   S.status = 'loading';
   S.searchError = '';
@@ -178,10 +211,11 @@ export async function openProject(id, opt = {}) {
     if (!v.ok) resetState({ status: 'corrupt', readOnly: v.readOnly, corrupt: { id, name: raw?.name ?? null, errors: v.errors } });
     else resetState({ ...fromRecord(v.record), status: 'ok', forceExample: v.record.dataMode !== 'real', warnings: v.record.dataMode === 'real' ? v.record.searchWarnings || [] : [EXAMPLE_LABEL], tab: opt.tab ?? 'explore' });
   }
+  syncWorkspaceBriefInputs(S.input || '');
   setUrl(opt.url ?? 'push');
   render();
   if (S.status === 'ok') { setSave('이 브라우저에 저장됨(불러옴)', false); refreshAnalysis(); } else setSave('', false);
-  $('#workspace').scrollIntoView?.();
+  if (!isWorkspaceLayout()) $('#workspace').scrollIntoView?.();
   focusHeading();
 }
 
@@ -190,6 +224,7 @@ export async function goHome(opt = { url: /** @type {'push'|'replace'|'none'} */
   if (!(await flushSave())) return;
   openLatest.next(); runner.cancel(); cancelAnalysis();
   resetState();
+  syncWorkspaceBriefInputs('');
   showWorkspace(false); setSave('', false);
   setUrl(opt.url);
   renderSaved();

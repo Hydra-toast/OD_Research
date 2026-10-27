@@ -1,5 +1,7 @@
 # Research Landscape 패러렐 UI/UX 평가와 Gemini 작업 지시서
 
+> 2026-10-27 후속 변경: 사용자 요청으로 2차 첨부 화면을 기본 `/`에 통합했습니다. 아래의 패러렐 전용·기본 화면 보존 지시는 이전 설계 기록입니다. 현재 기준은 `docs/PRODUCT_CONTRACT.md`와 실제 기본 작업 화면을 따릅니다.
+
 작성일: 2026-10-27  
 대상 프로젝트: `C:\Users\USER\Dev\Research_Page`  
 대상 화면: `/parallel.html`

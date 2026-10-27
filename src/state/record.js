@@ -24,12 +24,15 @@ export function toRecord(S, scopeText) {
     queryPlan: S.queryPlan, collectedAt: S.collectedAt, estimatedTotal: S.estimatedTotal, searchPage: S.searchPage, searchWarnings: S.warnings,
     researchBrief: S.researchBrief ?? null,
     refine: S.refine ?? emptyRefine(), summaries: S.summaries ?? [], fulltext: S.fulltext ?? {}, pdfFolder: safePdfFolder(S.pdfFolder), summaryCtx: S.summaryCtx ?? null,
+    summaryRequest: typeof S.summaryRequest === 'string' ? S.summaryRequest : '',
+    pCompareIds: Array.isArray(S.pCompareIds) ? S.pCompareIds : [],
     aiDirections: S.aiDirections ?? [], aiCompare: S.aiCompare ?? null, aiMemos: S.aiMemos ?? [], chatgptPlan: S.chatgptPlan ?? null, chatgptNote: S.chatgptNote ?? '', reviewStaleAt: S.reviewStaleAt ?? null,
   };
 }
 
 /** 저장 레코드 → 화면 상태에 덮어쓸 값. 검증을 통과한 레코드만 넣을 것. */
 export function fromRecord(r) {
+  const validIds = new Set(Array.isArray(r.papers) ? r.papers.map((/** @type {any} */ p) => p?.id).filter(Boolean) : []);
   return {
     projectId: r.id, name: r.name, input: r.originalInput, topicKey: r.topicKey, scope: r.scopeState, sort: r.sort ?? 'relevance',
     lab: r.lab ?? null, selPapers: r.selPapers, selDirs: r.selDirs, dirSnap: r.dirSnap, notes: r.notes, cellEdits: r.cellEdits,
@@ -39,6 +42,8 @@ export function fromRecord(r) {
     researchBrief: r.researchBrief ?? null,
     refine: normalizeRefine(r.refine),
     summaries: Array.isArray(r.summaries) ? r.summaries : [], fulltext: isObj(r.fulltext) ? r.fulltext : {}, pdfFolder: safePdfFolder(r.pdfFolder), summaryCtx: isObj(r.summaryCtx) ? r.summaryCtx : null,
+    summaryRequest: typeof r.summaryRequest === 'string' ? r.summaryRequest : '',
+    pCompareIds: Array.isArray(r.pCompareIds) ? r.pCompareIds.filter((/** @type {any} */ id) => typeof id === 'string' && validIds.has(id)).slice(0, 4) : [],
     aiDirections: Array.isArray(r.aiDirections) ? r.aiDirections : [], aiCompare: isObj(r.aiCompare) ? r.aiCompare : null, aiMemos: Array.isArray(r.aiMemos) ? r.aiMemos : [], chatgptPlan: isObj(r.chatgptPlan) ? r.chatgptPlan : null, chatgptNote: typeof r.chatgptNote === 'string' ? r.chatgptNote : '', reviewStaleAt: typeof r.reviewStaleAt === 'string' ? r.reviewStaleAt : null,
   };
 }

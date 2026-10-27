@@ -10,7 +10,7 @@ export function isPublicPath(pathname) {
   let decoded = pathname;
   try { decoded = decodeURIComponent(pathname); } catch { return false; }
   if (decoded !== pathname || decoded.includes('..') || decoded.includes('\\')) return false;
-  if (pathname === '/' || pathname === '/index.html' || pathname === '/styles.css' || pathname === '/parallel.html' || pathname === '/parallel.css') return true;
+  if (pathname === '/' || pathname === '/index.html' || pathname === '/styles.css' || pathname === '/parallel.html' || pathname === '/workspace.css') return true;
   return /^\/src\/[A-Za-z0-9._/-]+\.js$/.test(pathname);
 }
 
@@ -21,6 +21,11 @@ export function createStatic(root) {
     if (req.method !== 'GET' && req.method !== 'HEAD') return next();
     const pathname = new URL(req.url ?? '/', 'http://local').pathname;
     if (pathname.startsWith('/api/')) return next();
+    // 이전 북마크는 기본 화면으로 연결한다. 별도 패러렐 페이지는 제공하지 않는다.
+    if (pathname === '/parallel.html') {
+      res.redirect(308, '/' + new URL(req.url ?? '/', 'http://local').search);
+      return;
+    }
     if (!isPublicPath(pathname)) {
       res.status(404).json({ error: { code: 'not_found', message: '없는 경로예요.', requestId: req.id } });
       return;
