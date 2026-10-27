@@ -12,6 +12,7 @@ export const app = createApp({
   auth: createDisabledAuth(),
   projects: { forToken: () => null },
   search,
+  openalexContent: { apiKey: config.openalexKey },
   schedule: false,
   fulltext: { publicFetch: true, maxFileBytes: 3 * 1024 * 1024, mailto: config.mailto },
   config: { authEnabled: false, searchEnabled: config.searchEnabled },

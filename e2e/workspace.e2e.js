@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { test, expect } from '@playwright/test';
 
 function fixturePdf(text) {
@@ -68,6 +69,62 @@ async function startSingleBulk(page) {
   await page.locator('[data-ract="ft-bulk"]').first().click();
 }
 
+test('초록 기반 정리와 결과 확인을 원문 받기보다 먼저 안내한다', async ({ page }) => {
+  await searchFixture(page);
+  for (const width of [1440, 1024, 375]) {
+    await page.setViewportSize({ width, height: 900 });
+    if (width === 375) await page.locator('#pmob-work').click();
+    const order = await page.locator('.pw-quick-bar [data-pact]').evaluateAll(els => els.map(e => e.dataset.pact));
+    expect(order).toEqual(['quick-prompt', 'quick-import', 'quick-fulltext']);
+    expect(await page.locator('#sm-h').evaluate(el => el.compareDocumentPosition(document.querySelector('#sm-latest-h')) & Node.DOCUMENT_POSITION_FOLLOWING)).toBeTruthy();
+    expect(await page.locator('#sm-latest-h').evaluate(el => el.compareDocumentPosition(document.querySelector('#bulk-h')) & Node.DOCUMENT_POSITION_FOLLOWING)).toBeTruthy();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  }
+  // 기본 PDF 첨부와 1단계 초록 전달은 서로 독립적이다.
+  await expect(page.locator('[data-fk="summary-detail-make"]')).toBeVisible();
+  await expect(page.locator('[data-fk="summary-detail-text"]')).toBeHidden();
+  await page.locator('[data-fk="summary-make"]').click();
+  await expect.poll(() => page.evaluate(async () => (await import('/src/state/store.js')).S.summaryPrompt)).toContain('Polymer materials test fixture.');
+  await expect(page.locator('#ppanel-work')).toContainText('초록만');
+  const prompt = () => page.evaluate(async () => (await import('/src/state/store.js')).S.summaryPrompt);
+  expect(await prompt()).toContain('1단계 · Gemini 초록 선별');
+  expect(await prompt()).toContain('추천 논문 3~5편');
+  expect(await prompt()).not.toContain('### 2. 연구군 지도');
+  expect(await prompt()).not.toContain('파일은 여러 메시지로 추가될 수 있습니다');
+  // 원문 보관 상태와 관계없이 두 1단계 버튼은 초록만 전달한다.
+  await page.evaluate(async () => {
+    const { S } = await import('/src/state/store.js');
+    S.fulltext[S.papers[0].id] = { status: 'extracted' };
+    S.papers[1].abstract = '';
+  });
+  await page.locator('[data-pact="quick-prompt"]').click();
+  expect(await prompt()).toContain('원문 텍스트 포함 0편');
+  expect(await prompt()).toContain('메타데이터만 1편');
+  await page.locator('[data-fk="summary-detail-make"]').click();
+  expect(await prompt()).toContain('파일은 여러 메시지로 추가될 수 있습니다');
+  await page.getByText('PDF를 첨부할 수 없을 때', { exact: true }).click();
+  await page.locator('[data-fk="summary-detail-text"]').click();
+  await expect.poll(prompt).toContain('Polymer materials test fixture.');
+  expect(await prompt()).not.toContain('파일은 여러 메시지로 추가될 수 있습니다');
+  await page.evaluate(async () => { (await import('/src/state/store.js')).S.summaryMode = 'text'; });
+  await page.locator('[data-fk="summary-detail-make"]').click();
+  expect(await prompt()).toContain('파일은 여러 메시지로 추가될 수 있습니다');
+  await page.locator('[data-fk="summary-make"]').click();
+  expect(await prompt()).toContain('1단계 · Gemini 초록 선별');
+  await page.locator('[data-pact="quick-import"]').click();
+  await expect(page.locator('#sm-import-details')).toHaveAttribute('open', '');
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.evaluate(() => { document.body.style.zoom = '200%'; });
+  for (const target of ['[data-ract="summary-make"]', '#sm-import-h', '[data-ract="ft-bulk"]']) {
+    const el = page.locator(target).first();
+    await el.scrollIntoViewIfNeeded();
+    const rect = await el.boundingBox();
+    expect(rect.x).toBeGreaterThanOrEqual(0);
+    expect(rect.x + rect.width).toBeLessThanOrEqual(1441);
+  }
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+});
+
 test('개별 원문 작업은 해당 사이트를 새 탭으로 직접 연다', async ({ page }) => {
   await searchFixture(page);
   await page.evaluate(async () => {
@@ -83,6 +140,12 @@ test('개별 원문 작업은 해당 사이트를 새 탭으로 직접 연다', 
   await expect(pub).toHaveAttribute('target', '_blank');
   await expect(sci).toHaveAttribute('target', '_blank');
   await expect(page.locator('[data-ract="ft-fetch"], [data-ract="ft-scihub"]')).toHaveCount(0);
+  await page.evaluate(async () => {
+    const { S } = await import('/src/state/store.js');
+    const { render } = await import('/src/controller/render.js');
+    S.papers[0].fulltext.contentPdfUrl = 'https://content.openalex.org/works/W123.pdf'; render();
+  });
+  await expect(page.getByRole('link', { name: 'OpenAlex 원문 열기' })).toHaveAttribute('href', '/api/openalex-pdf?work=W123');
 });
 
 test('기본 화면 통합, 이전 주소 연결, 예시 모음과 저장 표시', async ({ page, request }) => {
@@ -219,13 +282,14 @@ test('프롬프트 갱신과 정리본 가져오기·안전한 표시·버전 �
   await page.locator('#summary-focus').fill('새로운 두 번째 초점');
   await page.locator('[data-pact="quick-prompt"]').click();
   await expect(page.locator('[data-ract="summary-prompt-edit"]')).toContainText('새로운 두 번째 초점');
+  await page.locator('[data-fk="summary-detail-make"]').click();
   const form = page.locator('[data-rform="summary-import"]');
   await page.locator('[data-pact="quick-import"]').click();
   await form.locator('[name=md]').fill('# 연구군\n가상 자료 [P1]\n| 단독 행\n#공백없음\n<img src=x onerror=alert(1)>');
   await page.locator('#ptab-detail').click();
   await page.locator('#ptab-cluster').click();
   await expect(form.locator('[name=md]')).toContainText('#공백없음');
-  await form.locator('[type=submit]').click();
+  await form.locator('[data-import-purpose="detail"]').click();
   await expect(page.locator('[data-summary-read]')).toContainText('| 단독 행');
   await expect(page.locator('[data-summary-read] img')).toHaveCount(0);
   await page.locator('[data-summary-read] [data-pact="open-detail"]').first().click();
@@ -233,7 +297,7 @@ test('프롬프트 갱신과 정리본 가져오기·안전한 표시·버전 �
   await page.locator('#ptab-cluster').click();
   await page.locator('[data-pact="quick-import"]').click();
   await form.locator('[name=md]').fill('# 두 번째 버전\n새로운 정리 [P2]');
-  await form.locator('[type=submit]').click();
+  await form.locator('[data-import-purpose="detail"]').click();
   await page.locator('[data-fk="sm-open-versions"]').click();
   await page.locator('[data-ract="summary-load"]').first().click();
   await expect(page.locator('[data-ract="summary-draft"]')).toContainText('# 연구군');
@@ -242,7 +306,7 @@ test('프롬프트 갱신과 정리본 가져오기·안전한 표시·버전 �
   await page.locator('#ptab-detail').click();
   await page.locator('#ptab-cluster').click();
   expect(await form.locator('input[type=file]').evaluate(el => el.files[0]?.name)).toBe('example-summary.md');
-  await form.locator('[type=submit]').click();
+  await form.locator('[data-import-purpose="detail"]').click();
   await expect(page.locator('[data-summary-read]')).toContainText('파일 정리본');
 });
 test('화면 크기별 목록 높이·주요 작업 접근·모바일 복귀', async ({ page }) => {
@@ -265,4 +329,69 @@ test('화면 크기별 목록 높이·주요 작업 접근·모바일 복귀', a
     }
     await page.screenshot({ path: `docs/captures/workspace-main-${width}.png`, fullPage: true });
   }
+});
+
+
+test('1단계 추천만 선택하고 원문 확보로 이동하며 오류 입력은 선택을 보존한다', async ({ page }) => {
+  await searchFixture(page);
+  await page.locator('[data-pact="quick-prompt"]').click();
+  await page.evaluate(async () => {
+    const { S } = await import('/src/state/store.js');
+    S.selPapers = [S.papers[0].id];
+    S.pCompareIds = [S.papers[0].id];
+    S.notes[S.papers[0].id] = '메모 보존';
+  });
+  await page.locator('[data-pact="quick-import"]').click();
+  const form = page.locator('[data-rform="summary-import"]');
+  await form.locator('[name=md]').fill('연구군 설명 [P1]\n1. [P9] 가상 예시\n추천 이유 [P4]\n2. [P3] 가상 예시\n선택 논문: [P9], [P3]');
+  await form.locator('[data-import-purpose="shortlist"]').click();
+  const selection = () => page.evaluate(async () => (await import('/src/state/store.js')).S.selPapers);
+  expect(await selection()).toEqual([papers[8].id, papers[2].id]);
+  await expect(page.locator('#bulk-h')).toBeFocused();
+  await expect(page.locator('#bulk-h')).toContainText('정리 대상 2편');
+  await expect(page.locator('[data-summary-read]')).toHaveCount(0);
+  expect(await page.evaluate(async () => {
+    const { S } = await import('/src/state/store.js');
+    return [S.pCompareIds, S.notes[S.papers[0].id], S.summaries.at(-1).paperIds.length];
+  })).toEqual([[papers[0].id], '메모 보존', 30]);
+  await page.locator('[data-pact="quick-import"]').click();
+  await form.locator('[name=md]').fill('추천을 결정하지 못했습니다.');
+  await form.locator('[data-import-purpose="shortlist"]').click();
+  expect(await selection()).toEqual([papers[8].id, papers[2].id]);
+  await expect(form.locator('[name=md]')).toHaveValue('추천을 결정하지 못했습니다.');
+  await expect(page.locator('.pw-summary-status')).toContainText('기존 선택');
+  await form.locator('[name=md]').fill('선택 논문: [P99]');
+  await form.locator('[data-import-purpose="shortlist"]').click();
+  expect(await selection()).toEqual([papers[8].id, papers[2].id]);
+  await expect(page.locator('#save-state')).toContainText('저장됨');
+  await page.reload();
+  await page.locator('#nav-saved').click();
+  await page.locator('[data-act="open-saved"]').first().click();
+  expect(await selection()).toEqual([papers[8].id, papers[2].id]);
+  await page.locator('[data-pact="quick-import"]').click();
+  await form.locator('[name=file]').setInputFiles({ name: 'recommendations.md', mimeType: 'text/markdown', buffer: Buffer.from('선택 논문: [P5], [P2]') });
+  await form.locator('[data-import-purpose="shortlist"]').click();
+  expect(await selection()).toEqual([papers[4].id, papers[1].id]);
+  await expect(page.locator('#bulk-h')).toBeFocused();
+});
+
+// 사용자 제공 응답 원문: 내용의 진위가 아니라 추천 번호 적용만 검사한다.
+test('구버전 프롬프트로 받은 실제 형식의 1단계 결과도 추천 다섯 편만 적용한다', async ({ page }) => {
+  await searchFixture(page);
+  await page.evaluate(async () => {
+    const { S } = await import('/src/state/store.js');
+    S.summaryCtx = { paperIds: S.papers.map(p => p.id), promptVersion: 'summary-v3-gemini' };
+    S.summaryPrompt = '';
+    S.selPapers = [S.papers[9].id];
+  });
+  await page.locator('[data-pact="quick-import"]').click();
+  const form = page.locator('[data-rform="summary-import"]');
+  await form.locator('[name=md]').fill(readFileSync(new URL('../tests/fixtures/shortlist-user-result.md', import.meta.url), 'utf8'));
+  await form.locator('button[type=submit]').first().click();
+  await expect.poll(() => page.evaluate(async () => (await import('/src/state/store.js')).S.selPapers)).toEqual([papers[0].id, papers[1].id, papers[2].id, papers[15].id, papers[3].id]);
+  await expect(page.locator('#bulk-h')).toBeFocused();
+  await expect(page.locator('#bulk-h')).toContainText('정리 대상 5편');
+  await expect(page.locator('.pw-paper-row')).toHaveCount(5);
+  await expect(page.locator('[data-fk="p-selected-only"]')).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator('[data-summary-read]')).toHaveCount(0);
 });

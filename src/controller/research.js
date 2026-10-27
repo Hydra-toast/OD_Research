@@ -8,7 +8,7 @@ import { autoSelectListed, listedItems, workspaceVisibleItems } from '../researc
 import { runBulk } from '../research/bulk.js';
 import { ruleRank, RANK_VERSION } from '../research/rank.js';
 import { suggestKeywords } from '../research/keywords.js';
-import { summaryPrompt, checkSummaryMd, SUMMARY_PROMPT_VERSION } from '../research/summary.js';
+import { summaryPrompt, checkSummaryMd, SUMMARY_PROMPT_VERSION, SHORTLIST_PROMPT_VERSION, parseShortlist } from '../research/summary.js';
 import { buildHandoff, parseHandoff, pickPapers, basisVersion } from '../research/handoff.js';
 import { candidateUrls, ftLabel } from '../views/research.js';
 import { saveFulltext, loadFulltext, loadFulltextPdf } from '../repository/idb.js';
@@ -252,14 +252,15 @@ async function uploadFiles(/** @type {FileList|File[]} */ files, /** @type {stri
 }
 
 // ---- 총정리 ----
-export async function buildPrompt(/** @type {string[]} */ ids, /** @type {string} */ previousMd) {
+export async function buildPrompt(/** @type {string[]} */ ids, /** @type {string} */ previousMd, abstractsOnly = false, /** @type {string|undefined} */ modeOverride = undefined) {
   const papers = ids.map(id => paperById(id)).filter(Boolean);
   const pagesById = /** @type {Record<string, any[]>} */ ({});
-  for (const p of papers) if (S.summaryMode === 'text' && S.fulltext[p.id]?.status === 'extracted' && S.projectId) pagesById[p.id] = (await loadFulltext(S.projectId, p.id)) || [];
+  const mode = modeOverride || S.summaryMode;
+  for (const p of papers) if (!abstractsOnly && mode === 'text' && S.fulltext[p.id]?.status === 'extracted' && S.projectId) pagesById[p.id] = (await loadFulltext(S.projectId, p.id)) || [];
   const keywords = suggestKeywords(S.papers, { known: [], limit: 10 }).map(k => k.term);
-  S.summaryPrompt = summaryPrompt({ mode: S.summaryMode, topic: S.input, papers, fulltext: S.fulltext, pagesById, keywords, request: S.summaryRequest, previousMd });
-  S.summaryCtx = { paperIds: papers.map(p => p.id), promptVersion: SUMMARY_PROMPT_VERSION, at: new Date().toISOString() };
-  try { await navigator.clipboard.writeText(S.summaryPrompt); S.summaryMsg = `프롬프트를 복사했어요(논문 ${papers.length}편). Gemini 대화에 붙여 넣으세요. ${S.summaryMode === 'text' ? '본문 발췌를 포함했어요.' : 'PDF를 직접 첨부한 뒤 ‘정리 시작’이라고 입력하세요.'}${previousMd && S.summaryMode !== 'text' ? ' 이전 정리본도 .md 저장 후 첨부하세요.' : ''} 이 사이트는 전송하지 않았어요.`; }
+  S.summaryPrompt = summaryPrompt({ mode: abstractsOnly ? 'abstracts' : mode, topic: S.input, papers, fulltext: abstractsOnly ? {} : S.fulltext, pagesById, keywords, request: S.summaryRequest, previousMd });
+  S.summaryCtx = { paperIds: papers.map(p => p.id), promptVersion: abstractsOnly ? SHORTLIST_PROMPT_VERSION : SUMMARY_PROMPT_VERSION, at: new Date().toISOString() };
+  try { await navigator.clipboard.writeText(S.summaryPrompt); S.summaryMsg = `프롬프트를 복사했어요(논문 ${papers.length}편). Gemini 대화에 붙여 넣으세요. ${abstractsOnly ? '제목·초록으로 바로 정리합니다. PDF 첨부는 필요 없습니다.' : mode === 'text' ? '초록과 확보된 본문 발췌를 포함했어요.' : 'PDF를 직접 첨부한 뒤 ‘정리 시작’이라고 입력하세요.'}${previousMd && mode !== 'text' ? ' 이전 정리본도 .md 저장 후 첨부하세요.' : ''} 이 사이트는 전송하지 않았어요.`; }
   catch { S.pPromptPreviewOpen = true; S.summaryMsg = '자동 복사에 실패했어요. 아래 미리보기에서 직접 복사하세요.'; }
   touch();
 }
@@ -316,7 +317,7 @@ function applyGpt() {
     S.papers = S.papers.map((/** @type {any} */ p) => byId.has(p.id) ? { ...p, externalReview: { ...byId.get(p.id), label: pending.payload.label, model: pending.payload.model || null, at: now, criterionVersion: S.chatgptPack?.basisVersion || null } } : p);
     S.papers.sort((a, b) => (order[a.externalReview?.judgment] ?? 9) - (order[b.externalReview?.judgment] ?? 9) || String(a.id).localeCompare(String(b.id)));
     S.chatgptUndo = { kind: 'review', papers: prev };
-    S.chatgptMsg = 'ChatGPT 평가를 보기 순서에 반영했어요. 규칙 점수와는 별개이고, 정확성은 확인하지 않았어요.';
+    S.chatgptMsg = 'ChatGPT 평가를 보기 순서에 반영했어요.';
   } else if (pending.purpose === 'direction') {
     S.chatgptUndo = { kind: 'direction', prev: S.aiDirections };
     S.aiDirections = pending.payload.directions;
@@ -328,7 +329,7 @@ function applyGpt() {
   } else if (pending.purpose === 'read' || pending.purpose === 'meeting') {
     S.chatgptUndo = { kind: 'memo', prev: S.aiMemos };
     S.aiMemos = [...S.aiMemos, { purpose: pending.purpose, text: pending.payload.text, at: now, paperIds: [...(S.chatgptPack?.includedIds || [])] }].slice(-20);
-    S.chatgptMsg = 'ChatGPT 답변을 메모로 저장했어요. 사실 여부는 확인하지 않았어요.';
+    S.chatgptMsg = 'ChatGPT 답변을 메모로 저장했어요.';
   } else if (pending.purpose === 'repair') {
     S.chatgptUndo = { kind: 'brief', prev: S.researchBrief, plan: S.chatgptPlan };
     S.chatgptPlan = { at: now, purpose: 'repair', queries: pending.payload.queries, source: 'external' };
@@ -399,7 +400,7 @@ export function initResearch() {
       case 'ft-scihub': { const p = paperById(id); if (p) await fetchScihub(p); break; }
       case 'ft-download': await downloadStoredPdf(id); break;
       case 'ft-bulk': case 'ft-fetch-all': await bulkToggle(); break;
-      case 'summary-make': await buildPrompt(S.selPapers, ''); break;
+      case 'summary-make': await buildPrompt(S.selPapers, '', isWorkspaceLayout() && t.dataset.summaryScope !== 'fulltext', t.dataset.summaryMode); break;
       case 'summary-prompt-dl': if (S.summaryPrompt) download('gemini-instructions.md', S.summaryPrompt); break;
       case 'summary-copy': try { await navigator.clipboard.writeText(S.summaryPrompt); S.summaryMsg = '복사했어요.'; } catch { S.pPromptPreviewOpen = true; S.summaryMsg = '복사에 실패했어요. 미리보기에서 직접 복사하세요.'; } render(); break;
       case 'summary-load': {
@@ -481,7 +482,26 @@ export function initResearch() {
         render();
         return;
       }
+      // 가져오기 목적은 버튼으로 정한다. 구버전 저장본·새로고침으로
+      // 프롬프트 버전/문자열이 달라도 1단계 자동 선택을 건너뛰지 않는다.
+      const shortlistMode = isWorkspaceLayout() && /** @type {HTMLElement|null} */ (e.submitter)?.dataset.importPurpose !== 'detail';
+      const picked = shortlistMode ? parseShortlist(md, ids, S.papers.map(p => p.id)) : null;
+      if (picked && !picked.ok) {
+        S.pFormDrafts ??= {};
+        S.pFormDrafts['summary-import:md'] = md;
+        S.pSummaryImportOpen = true;
+        S.summaryMsg = `${picked.message} 기존 선택과 정리본은 그대로 유지했어요.`;
+        render();
+        return;
+      }
       addVersion(md, [...ids], 'external');
+      if (picked?.ok) {
+        S.summaries[S.summaries.length - 1].promptVersion = SHORTLIST_PROMPT_VERSION;
+        S.selPapers = [...picked.ids];
+        S.pShowSelectedOnly = true;
+        S.pListScrollTop = 0;
+        S.pView = 'main'; S.pTask = 'cluster'; S.pMobilePane = 'work';
+      }
       f.reset();
       if (S.pFormDrafts) delete S.pFormDrafts['summary-import:md'];
       if (isWorkspaceLayout()) {
@@ -489,8 +509,14 @@ export function initResearch() {
         S.pSummaryImportOpen = false;
       }
       const c = S.summaries[S.summaries.length - 1].checks;
-      S.summaryMsg = `가져왔어요(외부 AI 초안 · 정확성 미검증). 출처 표시 ${c.refCount}곳, 표 ${c.tables}개, 그림 ${c.mermaid}개.${c.invalidRefs.length ? ` 없는 논문 번호: ${c.invalidRefs.join(', ')}.` : ''}${c.unsourcedParagraphs ? ` 출처 표시가 없는 문단이 약 ${c.unsourcedParagraphs}개 있어요(추정).` : ''}`;
+      S.summaryMsg = `AI 정리본을 가져왔어요. 출처 표시 ${c.refCount}곳, 표 ${c.tables}개, 그림 ${c.mermaid}개.${c.invalidRefs.length ? ` 없는 논문 번호: ${c.invalidRefs.join(', ')}.` : ''}${c.unsourcedParagraphs ? ` 출처 표시가 없는 문단이 약 ${c.unsourcedParagraphs}개 있어요(추정).` : ''}`;
       touch();
+      if (picked?.ok) {
+        S.summaryMsg = `추천 논문 ${picked.ids.length}편만 선택했어요. 아래에서 원문을 확보하세요.`;
+        render();
+        const { scrollWorkTo } = await import('./workspace.js');
+        scrollWorkTo('#bulk-h', '#bulk-h');
+      }
     }
     if (f.dataset.rform === 'gpt-import') {
       const purpose = S.chatgptPurpose || 'review';

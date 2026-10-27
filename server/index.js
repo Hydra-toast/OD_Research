@@ -18,6 +18,7 @@ export async function start(port) {
   const search = config.searchEnabled ? createLiveSearch({ apiKey: config.openalexKey, mailto: config.mailto }) : null;
   const app = createApp({
     auth, projects, search, root,
+    openalexContent: { apiKey: config.openalexKey },
     fulltext: { mailto: config.mailto },
     config: { authEnabled: config.authEnabled, searchEnabled: config.searchEnabled },
   });

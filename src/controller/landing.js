@@ -46,7 +46,7 @@ function setFormStatus(/** @type {HTMLFormElement} */ form, /** @type {string} *
 
 function queryEditor(/** @type {any} */ brief) {
   const rows = brief.queries.map((/** @type {any} */ q) => `<label class="card"><input type="checkbox" data-query checked value="${h(q.text)}"> <strong>${h(q.text)}</strong><br><span class="hint">${h(q.purpose || '')}</span></label>`).join('');
-  const confirm = brief.needsConfirm?.length ? `<p class="notice">사용자 확인 필요: 근거 문장이 입력한 내용에 없어요. ${brief.needsConfirm.map(h).join(', ')}. 형식 확인은 내용이 사실이라는 뜻이 아니에요.</p>` : '<p class="hint">형식만 확인했어요. 내용의 사실 여부는 검증하지 않았어요.</p>';
+  const confirm = brief.needsConfirm?.length ? `<p class="notice">사용자 확인 필요: 근거 문장이 입력한 내용에 없어요. ${brief.needsConfirm.map(h).join(', ')}.</p>` : '';
   const notes = [...(brief.warnings || []), ...(brief.assumptions || []), ...(brief.unknowns || [])];
   return `<h2>검색 문구를 확인하고 실행</h2>${confirm}<p>제안된 초기 조사 주제: ${h(brief.selectedTopic?.name || '직접 확인')}</p><p>${h(brief.selectedTopic?.question || '')}</p>${notes.length ? `<details><summary>가정과 확인할 내용</summary><ul>${notes.map(n => `<li>${h(n)}</li>`).join('')}</ul></details>` : ''}<p class="hint">원래 입력은 바꾸지 않았어요. 가정과 검색 문구를 확인한 뒤 실행하세요.</p><form data-brief-form="queries" class="stack">${rows}<label>검색 문구 추가<input data-query-add type="text" placeholder="영문 검색 문구"></label><div class="row"><button class="btn primary" type="submit">선택한 검색 문구 실행</button></div></form>`;
 }

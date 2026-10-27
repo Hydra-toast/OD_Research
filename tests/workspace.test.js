@@ -4,8 +4,17 @@ import { renderSafeSummaryMd, paperRefLabel, workspaceDetailHtml } from '../src/
 import { fromRecord, toRecord } from '../src/state/record.js';
 import { workspaceVisibleItems } from '../src/research/list.js';
 import { EXAMPLE_TOPICS } from '../src/data/examples.js';
+import { fulltextLine } from '../src/views/research.js';
 
 describe('기본 작업 화면', () => {
+  it('개별 OpenAlex 원문은 키를 노출하지 않는 서버 주소로 연결한다', () => {
+    const S = { ...fresh(), dataMode: 'real' };
+    const p = { id: 'user:test', title: '가상 예시 · 실제 논문 아님', origin: 'provider', doi: '10.1234/example', access: 'abstract', fulltext: { contentPdfUrl: 'https://content.openalex.org/works/W1.pdf', landingPageUrl: 'https://example.org/article' } };
+    expect(fulltextLine(S, p)).toContain('href="/api/openalex-pdf?work=W1"');
+    const withoutLanding = { ...p, fulltext: { contentPdfUrl: p.fulltext.contentPdfUrl } };
+    expect(fulltextLine(S, withoutLanding)).toContain('href="/api/openalex-pdf?work=W1"');
+    expect(fulltextLine(S, withoutLanding)).not.toContain('content.openalex.org');
+  });
   const papers = EXAMPLE_TOPICS.euv.papers;
   it('표가 아닌 파이프 행·제목이 아닌 #행에서도 진행하고 HTML을 실행하지 않는다', () => {
     const S = fresh();

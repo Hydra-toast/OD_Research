@@ -16,7 +16,7 @@ import {
 import { listedItems, matchedItems, workspaceVisibleItems, EXAMPLE_CAP, LIST_CAP } from '../research/list.js';
 import { applyRefine } from '../research/refine.js';
 import { suggestKeywords } from '../research/keywords.js';
-import { SUMMARY_PROMPT_VERSION } from '../research/summary.js';
+import { SUMMARY_PROMPT_VERSION, SHORTLIST_PROMPT_VERSION, parseShortlist } from '../research/summary.js';
 import { folderState } from '../controller/folder-state.js';
 
 const TASK_LABEL = {
@@ -141,6 +141,7 @@ export function workspaceListHtml(S) {
         <h2 id="pp-h" style="font-size:1.25rem">논문 목록 (${shown.length}편)</h2>
         <span class="hint" data-p-outside-count>선택된 논문 <strong>${S.selPapers.length}</strong>편 · 비교 <strong>${cmpCount}</strong>/4편${S.dataMode === 'real' ? ` · 조건 일치 ${rf.visible.length}편` : ''}</span>
       </div>
+      <p class="hint">제목을 눌러 초록을 확인하고 읽을 핵심 논문을 3~5편 추려 원문을 등록하세요.</p>
       <div class="toolbar pw-list-toolbar">
         <label class="pw-inline-label">정렬 <select data-act="sort" data-fk="sort">${[['relevance', '관련성'], ['recent', '최신순'], ['citations', '인용순']].map(([v, l]) => `<option value="${v}" ${S.sort === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
         <button class="btn small" type="button" data-ract="select-toggle" data-fk="p-select-toggle" ${shownIds.length ? '' : 'disabled'}>${allShownSelected ? `현재 목록 ${shownIds.length}편 선택 해제` : `현재 목록 ${shownIds.length}편 전체 선택`}</button>
@@ -276,9 +277,10 @@ export function workspaceWorkHtml(S) {
           </div>
         </div>
         <div class="pw-quick-bar" role="group" aria-label="주요 작업 빠른 접근">
-          <button type="button" class="btn small${busy ? ' primary' : ''}" data-pact="quick-fulltext" data-fk="q-fulltext">${busy ? `받기 취소 (${done}/${total})` : `원문 받기 (${S.selPapers.length}편)`}</button>
-          <button type="button" class="btn small" data-pact="quick-prompt" data-fk="q-prompt" ${S.selPapers.length ? '' : 'disabled'}>정리 프롬프트 복사</button>
+          <button type="button" class="btn small" data-pact="quick-prompt" data-fk="q-prompt" title="제목·초록을 바로 Gemini에 전달합니다. PDF는 필요하지 않습니다." ${S.selPapers.length ? '' : 'disabled'}>정리 프롬프트 복사</button>
           <button type="button" class="btn small" data-pact="quick-import" data-fk="q-import">결과 가져오기</button>
+          <button type="button" class="btn small${busy ? ' primary' : ''}" data-pact="quick-fulltext" data-fk="q-fulltext">${busy ? `받기 취소 (${done}/${total})` : `선택 원문 받기 (${S.selPapers.length}편)`}</button>
+          <span class="hint">1단계 · 제목·초록 포함 · PDF 불필요</span>
         </div>
       </div>
       ${busy || S.fulltextMsg || S.summaryMsg ? `<div class="pw-top-status" role="status" aria-live="polite">
@@ -349,18 +351,20 @@ export function workspaceDetailHtml(S) {
         <dt>DOI</dt><dd>${doiHref ? `<a href="${doiHref}" target="_blank" rel="noopener noreferrer">${h(p.doi)}</a>` : (p.doi ? h(p.doi) : '없음')}</dd>
         <dt>출처</dt><dd>${h(p.source || '미상')}${p.link ? ` · <a href="${h(p.link)}" target="_blank" rel="noopener noreferrer">공개 주소 열기</a>` : ''}</dd>
       </dl>
-      ${p.externalReview ? `<p class="notice">${tag('warn', '정확성 미검증')} ${h(p.externalReview.judgment)}</p>` : ''}
+      ${p.externalReview ? `<p class="hint">AI 분류: ${h(p.externalReview.judgment)}</p>` : ''}
       <p class="hint">${provider ? (p.relevance?.reasons?.length ? `규칙 정렬: ${p.relevance.reasons.slice(0, 3).map(h).join(' · ')} (검색어 일치 순서이며 AI 추천이 아닙니다.)` : '검색어 일치 순서이며 AI 추천이 아닙니다.') : `${h(ROLE_REASON[m.role])} ${reasons.map(h).join('; ')}`}</p>
     </section>
 
     <section class="card stack" aria-labelledby="p-abs-h">
       <h3 id="p-abs-h">초록 전문</h3>
+      <p class="hint">초록을 먼저 확인해 핵심 논문인지 판단한 뒤, 읽을 논문만 아래에서 원문을 받아 등록하세요.</p>
       ${p.abstract ? `<blockquote>${h(p.abstract)}</blockquote>` : '<p class="notice">초록이 없어요(서지정보만 확보).</p>'}
       <p class="hint">초록만 확보한 자료에서는 본문 절·그림·페이지 위치를 생성하지 않습니다.</p>
     </section>
 
     <section class="card stack" aria-labelledby="p-ft-h">
       <h3 id="p-ft-h">개별 원문 작업</h3>
+      <p class="hint">원문 사이트에서 직접 받은 PDF는 선택한 조사 폴더에 넣어 연결하거나 내 PDF 올리기로 등록할 수 있습니다.</p>
       ${provider ? fulltextLine(S, p) : `<p class="hint">${user ? '사용자가 직접 입력한 자료입니다(내용 확인 전).' : '가상 예시 문서예요. 실제 논문이 아니어서 원문 다운로드 대상이 아닙니다.'}</p>`}
     </section>
 
@@ -399,11 +403,57 @@ export function workspaceClusterHtml(S) {
 
     <section class="card stack" aria-labelledby="sm-h">
       <div class="pw-section-head">
-        <h2 id="sm-h" style="font-size:1.25rem" tabindex="-1">연구군·읽기 순서 정리 (원문 확보 · Gemini)</h2>
+        <h2 id="sm-h" style="font-size:1.25rem" tabindex="-1">1단계 · 읽을 논문 3~5편 추천</h2>
         ${S.dataMode !== 'real' ? exampleTag() : tag('info', '수동 전달 · AI 자동 호출 없음')}
       </div>
 
-      <div class="pw-scope-box stack" id="bulk-h" tabindex="-1" aria-label="자료 범위와 원문 확보">
+
+      <div class="stack">
+        <p class="meta topic-line" title="${h(S.input || '')}">조사 주제(자동 반영) · <strong>${h(S.input || '지정 안 함')}</strong></p>
+        <label class="focus-label" for="summary-focus">이번 정리에서 무엇을 알고 싶나요? (선택)</label>
+        <textarea id="summary-focus" data-ract="summary-request" data-fk="summary-focus" rows="2" placeholder="비워 두어도 기본 연구군·입문 읽기 순서 지시를 만듭니다. 예: 공정 변수와 결함 관계를 다룬 방법 위주로 처음 읽을 2~3편과 이유">${h(S.summaryRequest || '')}</textarea>
+      </div>
+
+      <p class="hint">1단계: 아래 버튼을 누르면 선택 논문의 제목·초록이 프롬프트에 포함됩니다. Gemini에 붙여 넣어 추천 논문 3~5편과 각 추천 이유를 확인하세요. 연구군은 2~3문장, 필요한 용어는 짧은 괄호 풀이로만 설명합니다. PDF 첨부나 추가 시작 명령은 필요 없습니다. 초록이 없는 논문은 자료 부족으로 남깁니다.</p>
+
+      <div class="row">
+        <button class="btn primary" type="button" data-ract="summary-make" data-fk="summary-make" ${sel ? '' : 'disabled'}>${sel}편으로 정리 프롬프트 복사</button>
+        <span class="hint">제목·초록 선별 → 결과 가져오기 → 추천 논문 원문 확보</span>
+      </div>
+
+      <details class="pw-subdetails" ${S.pPromptPreviewOpen || S.summaryPrompt ? 'open' : ''} data-pact-details="prompt-preview">
+        <summary>전달 방식과 미리보기</summary>
+        <div class="stack">
+          ${S.summaryPrompt
+            ? `<label>생성된 프롬프트 확인·수정 (자동 복사 실패 시 직접 선택해 복사)<textarea rows="6" data-ract="summary-prompt-edit" data-fk="summary-prompt-edit">${h(S.summaryPrompt)}</textarea></label>
+              <div class="row"><button class="btn" type="button" data-ract="summary-copy">다시 복사</button><button class="btn" type="button" data-ract="summary-prompt-dl">지시서 .md 저장</button></div>
+              <p class="hint">${S.summaryPrompt.length.toLocaleString()}자 · 생성된 지시서의 자료 범위를 확인하세요. 1단계는 초록만, 상세 정리는 아래에서 선택한 방식으로 전달합니다.</p>`
+            : '<p class="hint">‘정리 프롬프트 복사’를 누르면 생성과 복사가 한 번에 실행되고 여기에 미리보기가 열립니다.</p>'}
+        </div>
+      </details>
+
+      <details class="pw-subdetails" id="sm-import-details" ${!latest || S.pSummaryImportOpen || importDraft.trim() ? 'open' : ''} data-pact-details="summary-import">
+        <summary id="sm-import-h" tabindex="-1">결과 가져오기 (.md 파일 또는 붙여넣기)</summary>
+        <form data-rform="summary-import" class="stack">
+          <p class="hint">1단계 결과는 추천 논문만 자동 선택하고 원문 확보로 이동합니다. AI 답변 전체 또는 ‘선택 논문: [P번호], [P번호]’ 줄을 붙여 넣으세요.</p>
+          <label>.md 내용 붙여넣기<textarea name="md" rows="4" data-fk="summary-import-md" placeholder="AI 추천 결과 또는 선택 논문 줄을 붙여 넣으세요.">${h(importDraft)}</textarea></label>
+          <label>또는 .md 파일 선택<input type="file" name="file" accept=".md,text/markdown,text/plain"></label>
+          <div class="row"><button class="btn primary" type="submit" data-import-purpose="shortlist">추천 논문 선택하고 다음 단계로</button><button class="btn" type="submit" data-import-purpose="detail">선택 변경 없이 상세 정리본만 저장</button></div>
+        </form>
+      </details>
+      <p role="status" class="pw-summary-status">${h(S.summaryMsg || '')}</p>
+    </section>
+
+    ${latest ? workspaceLatestSummaryCard(S, latest, ver.length) : `<section class="card stack" aria-labelledby="sm-latest-h">
+      <div class="pw-section-head">
+        <h2 id="sm-latest-h" style="font-size:1.125rem" tabindex="-1">최신 정리본</h2>
+      </div>
+      <p class="hint">아직 저장된 정리본이 없어요. 결과를 가져오면 여기에 최신 연구군 표와 입문 읽기 순서가 바로 표시됩니다. (실제 결과를 가져오기 전에는 임의의 예시 연구군을 만들지 않습니다.)</p>
+    </section>`}
+    <section class="card stack">
+      <div class="pw-scope-box stack" id="bulk-h" tabindex="-1" aria-label="추천 논문 원문 확보 및 PDF 등록">
+        <h2 style="font-size:1.125rem">2단계 · 추천 논문 원문 확보 및 PDF 등록</h2>
+        <p class="hint">초록과 정리본으로 읽을 논문을 3~5편 추린 뒤 필요한 원문만 받거나, 직접 받은 PDF를 논문 상세 또는 선택한 폴더에서 연결하세요.</p>
         <div class="pw-scope-counts">
           <strong>정리 대상 ${sel}편</strong>
           <span aria-hidden="true">·</span>
@@ -422,58 +472,36 @@ export function workspaceClusterHtml(S) {
         <p class="hint">설정·관리에서 이 PC의 저장 폴더를 선택하면 조사별 폴더에 PDF를 저장합니다. 선택하지 않으면 브라우저 다운로드를 요청합니다.</p>
         <p class="hint">새 PDF 파일은 브라우저에 보관하지 않습니다. 추출한 본문 텍스트는 조사에 저장되며, Gemini 첨부와 AI 독해·사용자 원문 확인은 별도입니다.</p>
         ${S.dataMode === 'real' ? `<div class="row">
-          <button class="btn${busy ? '' : ' primary'}" type="button" data-ract="ft-bulk" data-fk="ft-bulk" ${sel || busy ? '' : 'disabled'}>${busy ? '받기 취소' : `${sel}편 원문 모두 받기`}</button>
+          <button class="btn" type="button" data-ract="ft-bulk" data-fk="ft-bulk" ${sel || busy ? '' : 'disabled'}>${busy ? '받기 취소' : `${sel}편 원문 모두 받기`}</button>
           ${busy ? '<span class="spin" role="status" aria-label="받는 중"></span>' : ''}
         </div>
         ${busy ? `<progress value="${done}" max="${total}"></progress>` : ''}
         <p role="status" class="hint">${busy ? '받는 중 ' : ''}${p ? `${done}/${total} · 확보 ${extracted + scanOnly} · 실패 ${p.fail || 0}` : ''}${S.fulltextMsg ? ` ${h(S.fulltextMsg)}` : ''}</p>` : `<p class="hint">${exampleTag()} 가상 예시 자료(${S.papers.length}편 중 정리 대상 ${sel}편)는 초록 기준으로 동작하며 실제 원문 PDF를 다운로드하지 않아요.</p>`}
       </div>
-
-      <div class="stack">
-        <p class="meta topic-line" title="${h(S.input || '')}">조사 주제(자동 반영) · <strong>${h(S.input || '지정 안 함')}</strong></p>
-        <label class="focus-label" for="summary-focus">이번 정리에서 무엇을 알고 싶나요? (선택)</label>
-        <textarea id="summary-focus" data-ract="summary-request" data-fk="summary-focus" rows="2" placeholder="비워 두어도 기본 연구군·입문 읽기 순서 지시를 만듭니다. 예: 공정 변수와 결함 관계를 다룬 방법 위주로 처음 읽을 2~3편과 이유">${h(S.summaryRequest || '')}</textarea>
-      </div>
-
-      <div class="row">
-        <button class="btn primary" type="button" data-ract="summary-make" data-fk="summary-make" ${sel ? '' : 'disabled'}>${sel}편으로 정리 프롬프트 복사</button>
-        <span class="hint">기본 방식: ${SUMMARY_PROMPT_VERSION} (${S.summaryMode === 'text' ? '본문 발췌 포함' : 'PDF 첨부용 짧은 지시서'})</span>
-      </div>
-
-      <details class="pw-subdetails" ${S.pPromptPreviewOpen || S.summaryPrompt ? 'open' : ''} data-pact-details="prompt-preview">
-        <summary>전달 방식과 미리보기</summary>
-        <div class="stack">
-          <label>전달 방식<select data-ract="summary-mode" data-fk="summary-mode"><option value="attachments" ${S.summaryMode !== 'text' ? 'selected' : ''}>PDF 첨부용 · 짧은 지시서 (기본)</option><option value="text" ${S.summaryMode === 'text' ? 'selected' : ''}>PDF 첨부 없이 · 본문 발췌 포함 (선택)</option></select></label>
-          ${S.summaryPrompt
-            ? `<label>생성된 프롬프트 확인·수정 (자동 복사 실패 시 직접 선택해 복사)<textarea rows="6" data-ract="summary-prompt-edit" data-fk="summary-prompt-edit">${h(S.summaryPrompt)}</textarea></label>
-              <div class="row"><button class="btn" type="button" data-ract="summary-copy">다시 복사</button><button class="btn" type="button" data-ract="summary-prompt-dl">지시서 .md 저장</button></div>
-              <p class="hint">${S.summaryPrompt.length.toLocaleString()}자 · PDF를 Gemini에 직접 첨부한 뒤 ‘정리 시작’을 입력하세요.</p>`
-            : '<p class="hint">‘정리 프롬프트 복사’를 누르면 생성과 복사가 한 번에 실행되고 여기에 미리보기가 열립니다.</p>'}
-        </div>
+      <p class="hint">원문 확보 후에는 논문별 문제·방법·결과·의미와 논문 간 비교를 정리해, 다른 사람에게 설명할 수 있는 자료를 만듭니다.</p>
+      <p class="hint">상세 정리 프롬프트를 복사한 뒤 선택한 논문의 PDF를 Gemini에 첨부하세요.</p>
+      <button class="btn primary" type="button" data-ract="summary-make" data-summary-scope="fulltext" data-summary-mode="attachments" data-fk="summary-detail-make" ${sel ? '' : 'disabled'}>PDF 첨부용 상세 정리 프롬프트 복사</button>
+      <details class="pw-subdetails">
+        <summary>PDF를 첨부할 수 없을 때</summary>
+        <p class="hint">초록과 확보된 본문 발췌를 프롬프트에 포함합니다. 논문당 본문은 최대 12,000자이며 그림·표나 뒷부분이 빠질 수 있습니다.</p>
+        <button class="btn" type="button" data-ract="summary-make" data-summary-scope="fulltext" data-summary-mode="text" data-fk="summary-detail-text" ${sel ? '' : 'disabled'}>초록·본문 발췌로 프롬프트 복사</button>
       </details>
 
-      <details class="pw-subdetails" id="sm-import-details" ${!latest || S.pSummaryImportOpen || importDraft.trim() ? 'open' : ''} data-pact-details="summary-import">
-        <summary id="sm-import-h" tabindex="-1">결과 가져오기 (.md 파일 또는 붙여넣기)</summary>
-        <form data-rform="summary-import" class="stack">
-          <label>.md 내용 붙여넣기<textarea name="md" rows="4" data-fk="summary-import-md" placeholder="Gemini가 작성한 연구군·읽기 순서 Markdown 결과를 붙여 넣으세요.">${h(importDraft)}</textarea></label>
-          <label>또는 .md 파일 선택<input type="file" name="file" accept=".md,text/markdown,text/plain"></label>
-          <div class="row"><button class="btn primary" type="submit">가져오고 형식 검사</button></div>
-        </form>
-      </details>
-      <p role="status" class="pw-summary-status">${h(S.summaryMsg || '')}</p>
     </section>
-
-    ${latest ? workspaceLatestSummaryCard(S, latest, ver.length) : `<section class="card stack" aria-labelledby="sm-latest-h">
-      <div class="pw-section-head">
-        <h2 id="sm-latest-h" style="font-size:1.125rem" tabindex="-1">최신 정리본</h2>
-      </div>
-      <p class="hint">아직 저장된 정리본이 없어요. 결과를 가져오면 여기에 최신 연구군 표와 입문 읽기 순서가 바로 표시됩니다. (실제 결과를 가져오기 전에는 임의의 예시 연구군을 만들지 않습니다.)</p>
-    </section>`}
   </div>`;
 }
 
 /** 최신 정리본 읽기/편집 분리 카드. @param {any} S @param {any} latest @param {number} totalCount */
 function workspaceLatestSummaryCard(S, latest, totalCount) {
+  if (latest.promptVersion === SHORTLIST_PROMPT_VERSION) {
+    const picked = parseShortlist(latest.md, latest.paperIds, S.papers.map(p => p.id));
+    return `<section class="card stack" aria-labelledby="sm-latest-h">
+      <h2 id="sm-latest-h" style="font-size:1.125rem" tabindex="-1">1단계 추천 논문 ${picked.ids.length}편</h2>
+      <p class="hint">추천 이유는 AI 대화에서 확인하세요. 아래 논문을 바탕으로 원문 확보를 진행할 수 있습니다. 현재 선택은 왼쪽 목록에서 조정할 수 있습니다.</p>
+      <div class="row">${picked.ids.map(id => `<button type="button" class="btn small" data-pact="open-detail" data-id="${h(id)}">[P${latest.paperIds.indexOf(id) + 1}] ${h(paperById(id, S)?.title || id)}</button>`).join('')}</div>
+      <div class="row"><button type="button" class="btn small" data-ract="summary-dl" data-id="${h(latest.id)}">원래 결과 .md 저장</button><button type="button" class="btn small" data-pact="open-settings-tab" data-tab="versions">이전 버전 관리 (${totalCount}개)</button></div>
+    </section>`;
+  }
   const isEdit = S.pSummaryViewMode === 'edit';
   const c = latest.checks || {};
   const draftIds = (S.summaryDraftIds?.length ? S.summaryDraftIds : latest.paperIds) || [];
@@ -481,7 +509,7 @@ function workspaceLatestSummaryCard(S, latest, totalCount) {
     <div class="pw-section-head">
       <div>
         <h2 id="sm-latest-h" style="font-size:1.25rem" tabindex="-1">최신 정리본 (${h(latest.at.slice(0, 16).replace('T', ' '))})</h2>
-        <p class="meta">${latest.source === 'user' ? tag('info', '사용자 수정본') : tag('warn', '외부 AI 초안 · 정확성 미검증')} · 대상 논문 ${latest.paperIds.length}편 · 출처 표시 ${c.refCount ?? 0}곳 · 표 ${c.tables ?? 0}개</p>
+        <p class="meta">${latest.source === 'user' ? tag('info', '사용자 수정본') : tag('info', 'AI 정리본')} · 대상 논문 ${latest.paperIds.length}편 · 출처 표시 ${c.refCount ?? 0}곳 · 표 ${c.tables ?? 0}개</p>
       </div>
       <div class="row" style="margin:0">
         <button type="button" class="btn small${!isEdit ? ' primary' : ''}" data-pact="summary-view-mode" data-mode="read" data-fk="sm-mode-read">읽기 표시</button>
@@ -672,7 +700,7 @@ function workspaceClaimsSubView(S, claims) {
   return `<div class="stack">
     <section class="card stack">
       <h2 style="font-size:1.25rem" tabindex="-1">발표할 문장과 근거</h2>
-      <p class="notice">${tag('info', 'AI 해석 안내')} ${S.dataMode === 'real' ? '이 검색 결과에는 AI 분석을 실행하지 않았어요. 직접 정리한 문장과 조건은 원문에서 확인하세요.' : 'AI 해석이 포함되어 있어요. 발표에 사용할 조건과 수치는 연결된 원문에서 확인하세요. (이 예시에서는 실제 AI가 실행되지 않았어요.)'}</p>
+      <p class="notice">${tag('info', '발표 준비')} ${S.dataMode === 'real' ? '발표할 문장과 근거를 정리하세요.' : '가상 예시의 발표 문장과 근거입니다.'}</p>
       ${dirs.length ? `<div class="stack"><span class="hint">발표에 포함할 연구 방향 선택:</span><div class="chips">${dirs.map((/** @type {any} */ d) => {
         const picked = S.selDirs.includes(d.id);
         return `<button type="button" class="chip${picked ? ' is-picked' : ''}" data-act="toggle-dir" data-id="${h(d.id)}" aria-pressed="${picked}">${picked ? '✓ ' : '+ '}${h(d.title || d.question || d.id)}</button>`;
@@ -773,7 +801,7 @@ export function workspaceSettingsHtml(S) {
       <p class="hint">새로운 정리 결과를 가져오거나 편집해 저장해도 이전 버전은 덮어쓰지 않고 모두 여기에 보관됩니다.</p>
       ${ver.length ? `<ol class="stack">${ver.map((/** @type {any} */ v, /** @type {number} */ idx) => `<li class="card paper-row">
         <div class="pw-section-head">
-          <span><strong>#${idx + 1}</strong> · ${h(v.at.slice(0, 16).replace('T', ' '))} · ${v.source === 'user' ? '내가 고침' : '외부 AI 초안 · 정확성 미검증'} · 논문 ${v.paperIds.length}편</span>
+          <span><strong>#${idx + 1}</strong> · ${h(v.at.slice(0, 16).replace('T', ' '))} · ${v.source === 'user' ? '내가 고침' : 'AI 정리본'} · 논문 ${v.paperIds.length}편</span>
           <div class="row" style="margin:0">
             <button class="btn small" type="button" data-ract="summary-load" data-id="${h(v.id)}">편집창으로 불러오기</button>
             <button class="btn small" type="button" data-ract="summary-dl" data-id="${h(v.id)}">.md 저장</button>

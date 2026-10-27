@@ -9,6 +9,7 @@ import { mountProduct } from './product.js';
 import { extractPdfText, mountFulltext } from './fulltext.js';
 import { createPdfInbox, mountPdfInbox } from './pdf-inbox.js';
 import { join } from 'node:path';
+import { createOpenAlexPdfHandler } from './openalex-content.js';
 
 const AUTH_MSG = {
   unauthorized: '로그인이 필요해요.',
@@ -16,7 +17,7 @@ const AUTH_MSG = {
   auth_not_configured: '계정 연결이 설정되지 않았어요. 예시 모드만 사용할 수 있어요.',
 };
 
-/** @param {{ auth: any, projects: any, search?: any, openai?: any, completeAi?: any, fulltext?: any, inbox?: any, schedule?: boolean, config: { authEnabled: boolean, searchEnabled?: boolean }, root: string }} deps */
+/** @param {{ auth: any, projects: any, search?: any, openai?: any, completeAi?: any, fulltext?: any, inbox?: any, openalexContent?: any, schedule?: boolean, config: { authEnabled: boolean, searchEnabled?: boolean }, root: string }} deps */
 export function createApp(deps) {
   const app = express();
   app.disable('x-powered-by');
@@ -52,6 +53,8 @@ export function createApp(deps) {
       lab: '계정에 가져온 연구실 정보는 프로젝트 기록의 lab 필드에만 저장되며, 로그인한 소유자만 볼 수 있어요. 외부 AI 전송 동의와는 별개예요.',
     });
   });
+
+  app.get('/api/openalex-pdf', createOpenAlexPdfHandler(deps.openalexContent));
 
   app.post('/api/auth/signup', async (req, res, next) => {
     try { res.status(202).json(await deps.auth.signup(req.body ?? {})); } catch (e) { next(e); }

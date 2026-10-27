@@ -29,7 +29,20 @@ export function candidateUrls(p) {
 
 /** @param {any} value */
 function safeExternalUrl(value) {
-  try { const url = new URL(value); return url.protocol === 'https:' ? url.href : ''; } catch { return ''; }
+  try {
+    const url = new URL(value);
+    // OpenAlex content API는 원문 다운로드에 키가 필요하므로 사용자에게 무인증 링크로 제시하지 않는다.
+    return url.protocol === 'https:' && url.hostname.toLowerCase() !== 'content.openalex.org' && !url.username && !url.password ? url.href : '';
+  } catch { return ''; }
+}
+
+/** 키를 브라우저에 내보내지 않고 OpenAlex 원문 경로의 논문 ID만 서버에 전달한다. @param {any} value */
+function openAlexPdfPath(value) {
+  try {
+    const u = new URL(value);
+    const match = u.protocol === 'https:' && u.hostname.toLowerCase() === 'content.openalex.org' && !u.username && !u.password && /^\/works\/(W\d{1,20})\.pdf$/.exec(u.pathname);
+    return match ? `/api/openalex-pdf?work=${match[1]}` : '';
+  } catch { return ''; }
 }
 
 /** 카드 안의 원문 상태. @param {any} S @param {any} p */
@@ -44,7 +57,7 @@ export function fulltextLine(S, p) {
     <p class="hint">사이트에서 직접 확인해 주세요. 연결 가능 여부는 각 사이트의 응답에 따라 달라집니다.</p></div>` : '';
   const receiving = (S.fulltextActive || []).includes(p.id);
   const cands = candidateUrls(p);
-  const publicUrl = [...cands, p.link, validDoi ? `https://doi.org/${doi}` : ''].map(safeExternalUrl).find(Boolean) || '';
+  const publicUrl = cands.map(openAlexPdfPath).find(Boolean) || [...cands, p.fulltext?.landingPageUrl, p.link, validDoi ? `https://doi.org/${doi}` : ''].map(safeExternalUrl).find(Boolean) || '';
   const sciUrl = validDoi ? `https://sci-hub.kr/${encodeURI(doi)}` : '';
   const proxy = proxyPrefix();
   const lib = proxy && p.doi ? `<a class="btn small" href="${h(proxy + 'https://doi.org/' + p.doi)}" target="_blank" rel="noopener noreferrer">도서관으로 열기</a>` : '';
@@ -52,7 +65,7 @@ export function fulltextLine(S, p) {
     : st ? (st.status === 'extracted' ? `원문 텍스트 ${st.pageCount}쪽 확보` : ftLabel(st.status))
     : (cands.length ? '공개 원문 후보 있음' : '공개 원문 후보 없음');
   return `<p data-ft-state="${h(p.id)}">${h(state)}${st?.source === '로컬 폴더에서 가져온 PDF' ? ' · 로컬 폴더에서 가져온 PDF' : ''}${st?.lastError ? ` · 최근 시도: ${h(ftLabel(st.lastError))}(기존 자료 유지)` : ''}</p>
-    <div class="row">${publicUrl ? `<a class="btn small" href="${h(publicUrl)}" target="_blank" rel="noopener noreferrer">공개 원문 사이트 열기</a>` : '<span class="hint">공개 원문 주소 없음</span>'}
+    <div class="row">${publicUrl ? `<a class="btn small" href="${h(publicUrl)}" target="_blank" rel="noopener noreferrer">${publicUrl.startsWith('/api/openalex-pdf') ? 'OpenAlex 원문 열기' : '공개 원문 사이트 열기'}</a>` : '<span class="hint">공개 원문 주소 없음</span>'}
     ${sciUrl ? `<a class="btn small" href="${h(sciUrl)}" target="_blank" rel="noopener noreferrer">Sci-Hub 사이트 열기</a>` : '<span class="hint">DOI가 없어 Sci-Hub 링크를 만들 수 없어요</span>'}
     ${st?.pdfAvailable ? `<button class="btn small" data-ract="ft-download" data-id="${h(p.id)}">이전에 보관한 PDF 다운로드</button>` : ''}
     ${lib}<label class="btn small">내 PDF 올리기<input type="file" accept="application/pdf" data-ract="ft-upload" data-id="${h(p.id)}" hidden></label></div>${manual}`;
@@ -152,7 +165,7 @@ export function summarySection(S) {
   const sel = S.selPapers.length;
   const ver = S.summaries || [];
   const draftIds = S.summaryDraftIds || [];
-  const versions = ver.length ? `<ol>${ver.map((/** @type {any} */ v) => `<li>${h(v.at.slice(0, 16).replace('T', ' '))} · ${v.source === 'user' ? '내가 고침' : '외부 AI 초안 · 정확성 미검증'} · 논문 ${v.paperIds.length}편
+  const versions = ver.length ? `<ol>${ver.map((/** @type {any} */ v) => `<li>${h(v.at.slice(0, 16).replace('T', ' '))} · ${v.source === 'user' ? '내가 고침' : 'AI 정리본'} · 논문 ${v.paperIds.length}편
       <button class="btn small" type="button" data-ract="summary-load" data-id="${h(v.id)}">불러오기</button>
       <button class="btn small" type="button" data-ract="summary-dl" data-id="${h(v.id)}">.md 저장</button>
       <button class="btn small" type="button" data-ract="summary-develop" data-id="${h(v.id)}">더 발전시키는 프롬프트</button></li>`).join('')}</ol>` : '<p>아직 저장한 정리본이 없어요.</p>';
@@ -177,7 +190,7 @@ export function summarySection(S) {
         <div class="row"><button class="btn" type="button" data-ract="summary-save-draft">새 버전으로 저장</button><button class="btn" type="button" data-ract="summary-dl" data-id="__draft">.md로 저장</button></div>
         <p class="hint">${draftIds.map((/** @type {string} */ id, /** @type {number} */ i) => `P${i + 1}=${h(id)}`).join(' · ')}</p>` : ''}
     </details>
-    <details><summary>안내</summary><p class="hint">이 사이트는 Gemini를 호출하지 않습니다. PDF는 Gemini의 파일 추가로 첨부하세요. 첨부 한도에 걸리면 같은 대화에서 나눠 첨부하고 마지막에 정리 시작을 요청하세요. 이전 정리본 발전 시에는 해당 .md도 첨부하세요. 형식 검사는 내용이 맞다는 뜻이 아닙니다. <label>도서관 주소 앞부분<input data-ract="proxy-set" value="${h(proxyPrefix())}" placeholder="https://"></label></p></details>
+    <details><summary>안내</summary><p class="hint">이 사이트는 Gemini를 호출하지 않습니다. PDF는 Gemini의 파일 추가로 첨부하세요. 첨부 한도에 걸리면 같은 대화에서 나눠 첨부하고 마지막에 정리 시작을 요청하세요. 이전 정리본 발전 시에는 해당 .md도 첨부하세요. <label>도서관 주소 앞부분<input data-ract="proxy-set" value="${h(proxyPrefix())}" placeholder="https://"></label></p></details>
   </section>`;
 }
 
@@ -194,7 +207,7 @@ export function chatgptPanel(S) {
   const pack = S.chatgptPack;
   const range = pack ? `<p class="hint">마지막 묶음: ${h(pack.note || '')} · ${pack.includedIds?.length || 0}편 포함${pack.omitted ? ` · ${pack.omitted}편 빠짐` : ''} · 기준 ${h(String(pack.basisVersion || '').slice(0, 80))}</p>` : '';
   const preview = pending ? `<div class="notice"><p>${h(pending.message || '')}</p>${pending.stale ? '<p>자료 기준이 달라 적용하지 않아요.</p>' : ''}${pending.unknown?.length ? `<p class="error">없는 ID: ${pending.unknown.map(h).join(', ')}</p>` : ''}${pending.preview?.length ? `<ul>${pending.preview.slice(0, 12).map((/** @type {string} */ line) => `<li>${h(line)}</li>`).join('')}</ul>` : ''}${pending.payload && !pending.stale ? '<button class="btn" type="button" data-ract="gpt-apply">확인 후 적용</button>' : ''}${pending.repairPrompt ? `<label>ChatGPT에 다시 붙일 보완 요청<textarea rows="6" readonly>${h(pending.repairPrompt)}</textarea></label>` : ''}</div>` : '';
-  const directions = (S.aiDirections || []).length ? `<details><summary>가져온 연구 방향 ${S.aiDirections.length}개 · 외부 초안 · 정확성 미검증</summary><ul>${S.aiDirections.map((/** @type {any} */ d) => `<li>${h(d.question)} <span class="hint">논문 ${d.paperIds.length}편${d.weak ? ' · 근거 부족' : ''} · ${h(d.reason || '')}</span></li>`).join('')}</ul></details>` : '';
+  const directions = (S.aiDirections || []).length ? `<details><summary>가져온 연구 방향 ${S.aiDirections.length}개</summary><ul>${S.aiDirections.map((/** @type {any} */ d) => `<li>${h(d.question)} <span class="hint">논문 ${d.paperIds.length}편${d.weak ? ' · 근거 부족' : ''} · ${h(d.reason || '')}</span></li>`).join('')}</ul></details>` : '';
   const compare = S.aiCompare?.rows?.length ? `<details><summary>가져온 비교 초안 · 확인된 수치가 아님</summary><ul>${S.aiCompare.rows.map((/** @type {any} */ r) => `<li>${h(r.item)} · ${r.cells.length}칸</li>`).join('')}</ul></details>` : '';
   const memos = (S.aiMemos || []).length ? `<details><summary>ChatGPT 메모 ${S.aiMemos.length}개</summary><ul>${S.aiMemos.slice(-5).map((/** @type {any} */ m) => `<li>${h(m.purpose)} · ${h(m.at.slice(0, 16).replace('T', ' '))} · ${h(m.text.slice(0, 120))}</li>`).join('')}</ul></details>` : '';
   const plan = S.chatgptPlan?.queries?.length ? `<details><summary>가져온 검색 문구 ${S.chatgptPlan.queries.length}개 · 아직 검색하지 않음</summary><ul>${S.chatgptPlan.queries.map((/** @type {any} */ q) => `<li>${h(q.text)} <span class="hint">${h(q.purpose || '')}</span></li>`).join('')}</ul><button class="btn small" type="button" data-ract="gpt-copy-queries">검색 문구 복사</button></details>` : '';

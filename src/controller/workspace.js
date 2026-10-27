@@ -53,7 +53,7 @@ function cancelSearchEdit() {
 }
 
 /** 우측 작업 패널 내부의 특정 요소를 스크롤 컨테이너 안에서 보이게 한다. @param {string} selector @param {string} [focusSel] */
-function scrollWorkTo(selector, focusSel) {
+export function scrollWorkTo(selector, focusSel) {
   const workEl = $('#ppanel-work');
   const target = $(selector);
   if (workEl && target) {
@@ -326,7 +326,7 @@ export function initWorkspace() {
         S.pMobilePane = 'work';
         render();
         if (S.selPapers.length > 0) {
-          await buildPrompt(S.selPapers, '');
+          await buildPrompt(S.selPapers, '', true);
         }
         scrollWorkTo('#sm-h', '#summary-focus');
         break;

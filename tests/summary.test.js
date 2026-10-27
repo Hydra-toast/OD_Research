@@ -1,10 +1,48 @@
 import { describe, it, expect } from 'vitest';
-import { summaryPrompt, checkSummaryMd, excerptOf, EXCERPT_CAP, SUMMARY_PROMPT_VERSION } from '../src/research/summary.js';
+import { summaryPrompt, checkSummaryMd, excerptOf, EXCERPT_CAP, SUMMARY_PROMPT_VERSION, parseShortlist } from '../src/research/summary.js';
+
+describe('추천 논문 자동 선택', () => {
+  const ids = ['example:a', 'example:b', 'example:c', 'example:d', 'example:e', 'example:f'];
+  it('설명 속 참조는 제외하고 선택 전용 줄의 순서와 원래 번호를 따른다', () => {
+    expect(parseShortlist('연구군 [P1]\n1. [P1] 설명\n선택 논문: [P4], [P2], [P4]', ids, ids).ids).toEqual([ids[3], ids[1]]);
+  });
+  it('이전 번호 목록에서도 제목의 번호만 추출한다', () => {
+    expect(parseShortlist('연구군 [P1]\n1. **[P3] 제목**\n추천 이유 [P5]\n2) [P2] 제목', ids, ids).ids).toEqual([ids[2], ids[1]]);
+  });
+  it.each(['선택 논문: 없음', '선택 논문: [P0]', '선택 논문: [P7]', '선택 논문: [P1], [P2], [P3], [P4], [P5], [P6]', '설명에서만 [P2]', '선택 논문: [P1]\n선택 논문: [P2]', '선택 논문: [P1], 잘못된번호'])('불명확하거나 잘못된 결과는 적용하지 않는다: %s', md => {
+    expect(parseShortlist(md, ids, ids).ok).toBe(false);
+  });
+  it('삭제된 논문에 대응하는 번호는 적용하지 않는다', () => {
+    expect(parseShortlist('선택 논문: [P2]', ids, [ids[0]]).ok).toBe(false);
+  });
+});
 
 const papers = [
   { id: 'oa:1', doi: '10.1/a', title: 'Alpha resist', year: 2020, abstract: 'Alpha abstract text.' },
   { id: 'oa:2', doi: null, title: 'Beta film', year: 2021, abstract: null },
 ];
+
+describe('1단계 짧은 초록 추천', () => {
+  it('초록과 번호를 보존하고 상세 정리 지시·원문·이전 결과를 포함하지 않는다', () => {
+    const p = { id: 'example:shortlist', title: '가상 예시 · 실제 논문 아님', abstract: 'ABSTRACT_SENTINEL' };
+    const prompt = summaryPrompt({ mode: 'abstracts', papers: [p, { id: 'example:missing', title: '가상 예시 · 초록 없음' }], request: '합성 조건', fulltext: { [p.id]: { status: 'extracted' } }, pagesById: { [p.id]: [{ page: 1, text: 'BODY_SENTINEL' }] }, previousMd: 'PREVIOUS_SENTINEL' });
+    expect(prompt).toContain('[P1] 가상 예시 · 실제 논문 아님');
+    expect(prompt).toContain('[P2] 가상 예시 · 초록 없음');
+    expect(prompt).toContain('ABSTRACT_SENTINEL');
+    expect(prompt).toContain('합성 조건');
+    expect(prompt).toContain('초록만 1편, 메타데이터만 1편');
+    expect(prompt).toContain('추천 논문 3~5편');
+    expect(prompt).toContain('2~3문장');
+    expect(prompt).toContain('최대 3개');
+    expect(prompt).not.toMatch(/BODY_SENTINEL|PREVIOUS_SENTINEL|### 2\. 연구군 지도|### 5\. 핵심 용어|### 7\. 출처 목록/);
+  });
+  it('자료가 적거나 없어도 추천 개수를 억지로 채우지 않게 한다', () => {
+    const prompt = summaryPrompt({ mode: 'abstracts', papers: [] });
+    expect(prompt).toContain('3편 미만이면 있는 만큼만');
+    expect(prompt).toContain('하나도 없으면 추천 불가 이유만');
+    expect(prompt).toContain('초록만 0편, 메타데이터만 0편');
+  });
+});
 
 describe('Gemini PDF 첨부용 기본 지시서', () => {
   it('긴 원문·초록·이전 문서가 기본 프롬프트 길이를 늘리지 않는다', () => {
@@ -65,14 +103,21 @@ describe('summaryPrompt', () => {
     expect(p).toContain('독립적인 근거가 아닙니다');
     expect(p).toContain('# 이전 [P1]');
   });
-  it('새 기본 지침에 분류 근거와 학습 순서를 요청하고 순위·전체 분야 주장과 구분한다', () => {
+  it('상세 정리는 논문별 설명과 비교·종합 문단을 요청하며 자료 경계를 유지한다', () => {
     const p = summaryPrompt({ mode: 'text', papers });
     expect(SUMMARY_PROMPT_VERSION).toBe('summary-v3-gemini');
     expect(p).toContain(`(${SUMMARY_PROMPT_VERSION})`);
-    const headings = ['### 1. 한눈에 보기와 자료 범위', '### 2. 연구군 지도', '### 3. 공통 입문 읽기 순서', '### 4. 관심사별 읽기 경로', '### 5. 핵심 용어', '### 6. 한계와 추가로 필요한 자료', '### 7. 출처 목록'];
+    const headings = ['### 1. 조사 질문과 전체 결론', '### 2. 연구군 지도와 접근법의 차이', '### 3. 논문별 핵심 설명', '### 4. 논문 간 비교와 종합 해석', '### 5. 다른 사람에게 설명하는 종합 문단', '### 6. 남은 질문과 확인할 근거', '### 7. 다시 확인할 곳'];
     const positions = headings.map(h => p.indexOf(h));
     expect(positions.every(n => n >= 0)).toBe(true);
     expect(positions).toEqual([...positions].sort((a, b) => a - b));
+    for (const mode of ['attachments', 'text']) {
+      const detailed = summaryPrompt({ mode, papers });
+      expect(detailed).toContain('### 3. 논문별 핵심 설명');
+      expect(detailed).toContain('### 5. 다른 사람에게 설명하는 종합 문단');
+      expect(detailed).not.toContain('1,500~2,500');
+    }
+    expect(summaryPrompt({ mode: 'abstracts', papers })).not.toContain('### 3. 논문별 핵심 설명');
     expect(p).toContain('분류 근거·자료 한계');
     expect(p).toContain('앞 논문과의 연결');
     expect(p).toContain('분야 전체를 대표한다고 보장되지 않습니다');
