@@ -1,5 +1,11 @@
 # 진행 기록
 
+## 2026-10-28 공개 사이트 논문 검색 진단
+
+- www.ondot.my의 `/api/config`는 404였고, 같은 PC의 로컬 서버 `/api/config`는 검색 활성 응답을 반환했다. 로컬 `/api/search`에 EUV photoresist를 요청해 OpenAlex 논문 50편을 받았다. 공개 사이트는 별도 검색 API가 필요한 상태다.
+- Vercel 배포용 검색 전용 진입점 네 개를 추가해 기존 검색·복수 검색·DOI 조회를 연결했다. 로컬 PDF 수신함이나 계정 API를 공개하는 용도는 아니다. 키와 이메일은 서버 환경 변수에서만 읽는다.
+- checkJs와 신규 진입점 검사 1개 통과. 로컬 HTTP로 설정·잘못된 요청·수신함 미노출을 확인했다. 배포 플랫폼의 실제 빌드와 공개 사이트 검색은 아직 검증하지 않았다. 배포 환경에서 OPENALEX_API_KEY와 CROSSREF_MAILTO 설정 여부 및 사용량을 별도 확인해야 한다.
+
 ## 2026-10-27 2차 첨부 화면을 기본 페이지로 통합
 
 - research_landscape_pararrel_2.html의 UI와 변경 모듈을 기본 index.html 및 workspace 모듈에 통합했다. 별도 parallel.html/css와 메뉴는 제거했다. 이전 주소는 쿼리를 유지해 기본 페이지로 308 이동한다.
