@@ -7,6 +7,7 @@ import {
 } from '../schema.js';
 import { emptyRefine, normalizeRefine } from '../research/refine.js';
 import { safePdfFolder } from '../research/pdf-folder.js';
+import { validKnowledgeEntries } from '../research/knowledge.js';
 
 export const SCHEMA_VERSION = 2;
 export const EXAMPLE_DATA_VERSION = 'example-v1';
@@ -25,6 +26,7 @@ export function toRecord(S, scopeText) {
     researchBrief: S.researchBrief ?? null,
     refine: S.refine ?? emptyRefine(), summaries: S.summaries ?? [], fulltext: S.fulltext ?? {}, pdfFolder: safePdfFolder(S.pdfFolder), summaryCtx: S.summaryCtx ?? null,
     summaryRequest: typeof S.summaryRequest === 'string' ? S.summaryRequest : '',
+    knowledgeImports: S.knowledgeImports ?? [],
     pCompareIds: Array.isArray(S.pCompareIds) ? S.pCompareIds : [],
     aiDirections: S.aiDirections ?? [], aiCompare: S.aiCompare ?? null, aiMemos: S.aiMemos ?? [], chatgptPlan: S.chatgptPlan ?? null, chatgptNote: S.chatgptNote ?? '', reviewStaleAt: S.reviewStaleAt ?? null,
   };
@@ -43,6 +45,7 @@ export function fromRecord(r) {
     refine: normalizeRefine(r.refine),
     summaries: Array.isArray(r.summaries) ? r.summaries : [], fulltext: isObj(r.fulltext) ? r.fulltext : {}, pdfFolder: safePdfFolder(r.pdfFolder), summaryCtx: isObj(r.summaryCtx) ? r.summaryCtx : null,
     summaryRequest: typeof r.summaryRequest === 'string' ? r.summaryRequest : '',
+    knowledgeImports: Array.isArray(r.knowledgeImports) ? r.knowledgeImports : [],
     pCompareIds: Array.isArray(r.pCompareIds) ? r.pCompareIds.filter((/** @type {any} */ id) => typeof id === 'string' && validIds.has(id)).slice(0, 4) : [],
     aiDirections: Array.isArray(r.aiDirections) ? r.aiDirections : [], aiCompare: isObj(r.aiCompare) ? r.aiCompare : null, aiMemos: Array.isArray(r.aiMemos) ? r.aiMemos : [], chatgptPlan: isObj(r.chatgptPlan) ? r.chatgptPlan : null, chatgptNote: typeof r.chatgptNote === 'string' ? r.chatgptNote : '', reviewStaleAt: typeof r.reviewStaleAt === 'string' ? r.reviewStaleAt : null,
   };
@@ -121,6 +124,7 @@ function validateRecordBody(rec) {
   const r = migrateRecord(rec);
   if (!r) return { ok: false, errors: ['주제 정보를 알 수 없어 복원할 수 없음'], readOnly: false, record: rec };
   const e = [...validateProject(r)];
+  if (r.knowledgeImports !== undefined && !validKnowledgeEntries(r.knowledgeImports)) e.push('knowledgeImports: 지식 지도 형식 오류');
   if (r.dataMode !== 'real' && !TOPIC_DEFS[r.topicKey]) e.push(`알 수 없는 주제: ${r.topicKey}`);
   const papers = Array.isArray(r.papers) ? r.papers : (e.push('papers 배열 필요'), []);
   const ids = new Set();

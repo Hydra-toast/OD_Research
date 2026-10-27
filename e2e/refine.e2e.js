@@ -46,14 +46,14 @@ test('세부 검색, 전체 선택, 원문, 총정리 프롬프트, md 가져오
   const prompt = panel.locator('[data-ract=summary-prompt-edit]');
   await expect(prompt).toHaveValue(/\[P1\]/);
   await expect(prompt).toHaveValue(/Gemini/);
-  await expect(prompt).toHaveValue(/첨부 여부는 Gemini에서 확인/);
+  await expect(prompt).toHaveValue(/첨부 여부는 사용하는 AI에서 확인/);
   await expect(prompt).not.toHaveValue(/Fixture full text page one/);
   await panel.getByLabel('이번 정리에서 무엇을 알고 싶나요?').fill('결함 원인 위주로');
   await panel.getByText('전달 방식과 미리보기', { exact: true }).click();
   await panel.locator('[data-ract=summary-mode]').selectOption('text');
   await panel.getByRole('button', { name: '3편으로 정리 프롬프트 복사' }).click();
   await expect(prompt).toHaveValue(/원문 텍스트 포함 3편/);
-  await expect(prompt).toHaveValue(/summary-v3-gemini/);
+  await expect(prompt).toHaveValue(/summary-v4-portable/);
   await expect(prompt).toHaveValue(/## 이번 정리의 초점 \(가장 우선\)\n결함 원인 위주로/);
   await expect(prompt).toHaveValue(/### 2\. 연구군 지도/);
   await expect(prompt).toHaveValue(/### 3\. 공통 입문 읽기 순서/);

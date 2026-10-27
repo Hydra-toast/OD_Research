@@ -16,6 +16,7 @@ import {
 import { listedItems, matchedItems, workspaceVisibleItems, EXAMPLE_CAP, LIST_CAP } from '../research/list.js';
 import { applyRefine } from '../research/refine.js';
 import { suggestKeywords } from '../research/keywords.js';
+import { knowledgeEntries } from '../research/knowledge.js';
 import { SUMMARY_PROMPT_VERSION, SHORTLIST_PROMPT_VERSION, parseShortlist } from '../research/summary.js';
 import { folderState } from '../controller/folder-state.js';
 
@@ -277,7 +278,7 @@ export function workspaceWorkHtml(S) {
           </div>
         </div>
         <div class="pw-quick-bar" role="group" aria-label="주요 작업 빠른 접근">
-          <button type="button" class="btn small" data-pact="quick-prompt" data-fk="q-prompt" title="제목·초록을 바로 Gemini에 전달합니다. PDF는 필요하지 않습니다." ${S.selPapers.length ? '' : 'disabled'}>정리 프롬프트 복사</button>
+          <button type="button" class="btn small" data-pact="quick-prompt" data-fk="q-prompt" title="제목·초록을 AI에 전달할 프롬프트를 복사합니다. PDF는 필요하지 않습니다." ${S.selPapers.length ? '' : 'disabled'}>정리 프롬프트 복사</button>
           <button type="button" class="btn small" data-pact="quick-import" data-fk="q-import">결과 가져오기</button>
           <button type="button" class="btn small${busy ? ' primary' : ''}" data-pact="quick-fulltext" data-fk="q-fulltext">${busy ? `받기 취소 (${done}/${total})` : `선택 원문 받기 (${S.selPapers.length}편)`}</button>
           <span class="hint">1단계 · 제목·초록 포함 · PDF 불필요</span>
@@ -397,6 +398,7 @@ export function workspaceClusterHtml(S) {
   const ver = S.summaries || [];
   const latest = ver.length ? ver[ver.length - 1] : null;
   const importDraft = S.pFormDrafts?.['summary-import:md'] ?? '';
+  const knowledgeCount = knowledgeEntries(S).length;
 
   return `<div class="stack pw-cluster-view">
     ${S.dataMode === 'real' && S.queryPlan?.untranslated?.length ? `<section class="card stack"><form data-act="english-query" class="stack"><p class="notice">사전에 없는 표현: ${S.queryPlan.untranslated.map(h).join(', ')}</p><label>영문 검색어 직접 지정<input type="text" name="english" value="${h(S.queryPlan.english)}" data-fk="english-query"></label><div class="row"><button class="btn primary" type="submit">이 검색어로 다시 찾기</button></div></form></section>` : ''}
@@ -414,7 +416,7 @@ export function workspaceClusterHtml(S) {
         <textarea id="summary-focus" data-ract="summary-request" data-fk="summary-focus" rows="2" placeholder="비워 두어도 기본 연구군·입문 읽기 순서 지시를 만듭니다. 예: 공정 변수와 결함 관계를 다룬 방법 위주로 처음 읽을 2~3편과 이유">${h(S.summaryRequest || '')}</textarea>
       </div>
 
-      <p class="hint">1단계: 아래 버튼을 누르면 선택 논문의 제목·초록이 프롬프트에 포함됩니다. Gemini에 붙여 넣어 추천 논문 3~5편과 각 추천 이유를 확인하세요. 연구군은 2~3문장, 필요한 용어는 짧은 괄호 풀이로만 설명합니다. PDF 첨부나 추가 시작 명령은 필요 없습니다. 초록이 없는 논문은 자료 부족으로 남깁니다.</p>
+      <p class="hint">1단계: 아래 버튼을 누르면 선택 논문의 제목·초록이 프롬프트에 포함됩니다. 사용하는 AI에 붙여 넣어 추천 논문 3~5편과 각 추천 이유를 확인하세요. 연구군은 2~3문장, 필요한 용어는 짧은 괄호 풀이로만 설명합니다. PDF 첨부나 추가 시작 명령은 필요 없습니다. 초록이 없는 논문은 자료 부족으로 남깁니다.</p>
 
       <div class="row">
         <button class="btn primary" type="button" data-ract="summary-make" data-fk="summary-make" ${sel ? '' : 'disabled'}>${sel}편으로 정리 프롬프트 복사</button>
@@ -470,7 +472,7 @@ export function workspaceClusterHtml(S) {
             ? `<p class="hint">원문 텍스트가 아직 없는 ${missingFt}편은 초록·서지정보 범위로 안내됩니다. 원문이 부족해도 프롬프트 복사와 정리 진행을 막지 않아요.</p>`
             : '<p class="hint">선택한 모든 논문의 원문 텍스트가 확보되어 있습니다.</p>'}
         <p class="hint">설정·관리에서 이 PC의 저장 폴더를 선택하면 조사별 폴더에 PDF를 저장합니다. 선택하지 않으면 브라우저 다운로드를 요청합니다.</p>
-        <p class="hint">새 PDF 파일은 브라우저에 보관하지 않습니다. 추출한 본문 텍스트는 조사에 저장되며, Gemini 첨부와 AI 독해·사용자 원문 확인은 별도입니다.</p>
+        <p class="hint">새 PDF 파일은 브라우저에 보관하지 않습니다. 추출한 본문 텍스트는 조사에 저장되며, AI 첨부와 AI 독해·사용자 원문 확인은 별도입니다.</p>
         ${S.dataMode === 'real' ? `<div class="row">
           <button class="btn" type="button" data-ract="ft-bulk" data-fk="ft-bulk" ${sel || busy ? '' : 'disabled'}>${busy ? '받기 취소' : `${sel}편 원문 모두 받기`}</button>
           ${busy ? '<span class="spin" role="status" aria-label="받는 중"></span>' : ''}
@@ -479,7 +481,16 @@ export function workspaceClusterHtml(S) {
         <p role="status" class="hint">${busy ? '받는 중 ' : ''}${p ? `${done}/${total} · 확보 ${extracted + scanOnly} · 실패 ${p.fail || 0}` : ''}${S.fulltextMsg ? ` ${h(S.fulltextMsg)}` : ''}</p>` : `<p class="hint">${exampleTag()} 가상 예시 자료(${S.papers.length}편 중 정리 대상 ${sel}편)는 초록 기준으로 동작하며 실제 원문 PDF를 다운로드하지 않아요.</p>`}
       </div>
       <p class="hint">원문 확보 후에는 논문별 문제·방법·결과·의미와 논문 간 비교를 정리해, 다른 사람에게 설명할 수 있는 자료를 만듭니다.</p>
-      <p class="hint">상세 정리 프롬프트를 복사한 뒤 선택한 논문의 PDF를 Gemini에 첨부하세요.</p>
+      <p class="hint">상세 정리 프롬프트를 복사한 뒤 선택한 논문의 PDF를 사용하는 AI에 첨부하세요.</p>
+      <p class="meta" data-knowledge-status>전문 도우미 지침 포함 · 누적 정리 ${knowledgeCount}건</p>
+      <p class="hint">정리본을 가져오면 이 조사에 지도가 쌓입니다. 다음 프롬프트에는 지도를 함께 전달하며, 새 조사에서는 저장한 지도를 불러올 수 있습니다. 새 AI 대화에도 지도 파일을 첨부하거나 내용을 붙여 넣으세요.</p>
+      <div class="row">
+        <button class="btn small" type="button" data-ract="knowledge-download" ${knowledgeCount ? '' : 'disabled'}>지식 지도 .md 저장</button>
+        <button class="btn small" type="button" data-ract="knowledge-copy" ${knowledgeCount ? '' : 'disabled'}>지도 내용 복사</button>
+        <button class="btn small" type="button" data-ract="knowledge-pick">이전 지도 불러오기</button>
+        <input type="file" data-ract="knowledge-import" aria-label="이전 지식 지도 파일" accept=".md,text/markdown,text/plain" hidden>
+        ${S.knowledgeImports?.length ? '<button class="btn small" type="button" data-ract="knowledge-clear">불러온 지도 연결 해제</button>' : ''}
+      </div>
       <button class="btn primary" type="button" data-ract="summary-make" data-summary-scope="fulltext" data-summary-mode="attachments" data-fk="summary-detail-make" ${sel ? '' : 'disabled'}>PDF 첨부용 상세 정리 프롬프트 복사</button>
       <details class="pw-subdetails">
         <summary>PDF를 첨부할 수 없을 때</summary>

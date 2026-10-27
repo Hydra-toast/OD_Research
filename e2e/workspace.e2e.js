@@ -1,5 +1,70 @@
 import { readFileSync } from 'node:fs';
 import { test, expect } from '@playwright/test';
+import { knowledgeDocument, parseKnowledge, knowledgeKey } from '../src/research/knowledge.js';
+
+test('지식 지도는 상세 결과에서 누적되고 다른 조사·새로고침·새 AI 프롬프트로 이어진다', async ({ page }) => {
+  await searchFixture(page);
+  await page.evaluate(async () => {
+    const { S } = await import('/src/state/store.js');
+    const { render } = await import('/src/controller/render.js');
+    S.selPapers = [S.papers[0].id]; S.pTask = 'cluster'; render();
+  });
+  await page.locator('[data-fk="summary-detail-make"]').click();
+  await expect.poll(() => page.evaluate(async () => (await import('/src/state/store.js')).S.summaryPrompt)).toContain('후속 대화 활용 지침');
+  await page.locator('[data-fk="summary-import-md"]').fill('### 가상 예시 · 실제 논문 아님\n\n누적할 상세 설명 [P1]');
+  await page.locator('[data-import-purpose="detail"]').click();
+  await expect(page.locator('[data-knowledge-status]')).toContainText('누적 정리 1건');
+  const downloadEvent = page.waitForEvent('download');
+  await page.locator('[data-ract="knowledge-download"]').click();
+  const downloaded = await downloadEvent;
+  expect(downloaded.suggestedFilename()).toBe('research-knowledge.md');
+  const originalEntries = parseKnowledge(readFileSync(await downloaded.path(), 'utf8'));
+  expect(originalEntries[0].papers[0].title).toContain('가상 예시');
+  const originalKey = knowledgeKey(originalEntries[0]);
+  const projectId = await page.evaluate(async () => {
+    const { S } = await import('/src/state/store.js');
+    const { flushSave } = await import('/src/controller/persist.js');
+    await flushSave(); return S.projectId;
+  });
+  // 같은 파일을 다른 조사로 옮긴다. 원 조사와 새 조사의 P1이 달라도 출처는 보존.
+  await searchFixture(page);
+  await page.evaluate(async () => {
+    const { S } = await import('/src/state/store.js');
+    const { render } = await import('/src/controller/render.js');
+    S.selPapers = [S.papers[1].id]; render();
+  });
+  const file = { name: 'research-knowledge.md', mimeType: 'text/markdown', buffer: Buffer.from(knowledgeDocument(originalEntries)) };
+  await page.locator('[data-ract="knowledge-import"]').setInputFiles(file);
+  await expect(page.locator('[data-knowledge-status]')).toContainText('누적 정리 1건');
+  await page.locator('[data-ract="knowledge-import"]').setInputFiles(file);
+  await expect(page.locator('[data-knowledge-status]')).toContainText('누적 정리 1건');
+  const nextProjectId = await page.evaluate(async () => {
+    const { S } = await import('/src/state/store.js');
+    const { flushSave } = await import('/src/controller/persist.js');
+    await flushSave(); return S.projectId;
+  });
+  expect(nextProjectId).not.toBe(projectId);
+  await page.goto('/?project=' + nextProjectId);
+  await page.locator('#nav-saved').click();
+  await page.locator(`[data-act="open-saved"][data-id="${nextProjectId}"]`).click();
+  await expect(page.locator('[data-knowledge-status]')).toContainText('누적 정리 1건');
+  const autoDownload = page.waitForEvent('download');
+  await page.locator('[data-fk="summary-detail-make"]').click();
+  const bundle = await autoDownload;
+  const entries = parseKnowledge(readFileSync(await bundle.path(), 'utf8'));
+  expect(knowledgeKey(entries[0])).toBe(originalKey);
+  await expect.poll(() => page.evaluate(async () => (await import('/src/state/store.js')).S.summaryPrompt)).toContain('지식 지도(1건)');
+  expect(await page.evaluate(async () => (await import('/src/state/store.js')).S.summaryPrompt)).not.toContain('누적할 상세 설명');
+  await page.locator('[data-ract="knowledge-import"]').setInputFiles({ name: 'bad.md', mimeType: 'text/markdown', buffer: Buffer.from('# broken') });
+  await expect(page.locator('.pw-summary-status')).toContainText('이 사이트에서 저장한');
+  await expect(page.locator('[data-knowledge-status]')).toContainText('누적 정리 1건');
+  await page.locator('[data-ract="knowledge-clear"]').click();
+  await expect(page.locator('[data-knowledge-status]')).toContainText('누적 정리 0건');
+  await page.goto('/?project=' + projectId);
+  await page.locator('#nav-saved').click();
+  await page.locator(`[data-act="open-saved"][data-id="${projectId}"]`).click();
+  await expect(page.locator('[data-knowledge-status]')).toContainText('누적 정리 1건');
+});
 
 function fixturePdf(text) {
   const stream = `BT /F1 12 Tf 50 700 Td (${text}) Tj ET`;
@@ -87,7 +152,7 @@ test('초록 기반 정리와 결과 확인을 원문 받기보다 먼저 안내
   await expect.poll(() => page.evaluate(async () => (await import('/src/state/store.js')).S.summaryPrompt)).toContain('Polymer materials test fixture.');
   await expect(page.locator('#ppanel-work')).toContainText('초록만');
   const prompt = () => page.evaluate(async () => (await import('/src/state/store.js')).S.summaryPrompt);
-  expect(await prompt()).toContain('1단계 · Gemini 초록 선별');
+  expect(await prompt()).toContain('1단계 · AI 초록 선별');
   expect(await prompt()).toContain('추천 논문 3~5편');
   expect(await prompt()).not.toContain('### 2. 연구군 지도');
   expect(await prompt()).not.toContain('파일은 여러 메시지로 추가될 수 있습니다');
@@ -110,7 +175,7 @@ test('초록 기반 정리와 결과 확인을 원문 받기보다 먼저 안내
   await page.locator('[data-fk="summary-detail-make"]').click();
   expect(await prompt()).toContain('파일은 여러 메시지로 추가될 수 있습니다');
   await page.locator('[data-fk="summary-make"]').click();
-  expect(await prompt()).toContain('1단계 · Gemini 초록 선별');
+  expect(await prompt()).toContain('1단계 · AI 초록 선별');
   await page.locator('[data-pact="quick-import"]').click();
   await expect(page.locator('#sm-import-details')).toHaveAttribute('open', '');
   await page.setViewportSize({ width: 1440, height: 900 });

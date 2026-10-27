@@ -54,7 +54,7 @@ describe('Gemini PDF 첨부용 기본 지시서', () => {
     expect(long).toContain('sample.pdf');
     expect(long).toContain('DOI: 미확인');
     expect(long.length - short.length).toBeLessThan(300);
-    expect(long).toContain('첨부 여부는 Gemini에서 확인');
+    expect(long).toContain('첨부 여부는 사용하는 AI에서 확인');
     expect(long).toContain('정리 시작');
     expect(long).toContain('메타데이터만 있으면 내용 분류·추천을 보류');
   });
@@ -105,7 +105,7 @@ describe('summaryPrompt', () => {
   });
   it('상세 정리는 논문별 설명과 비교·종합 문단을 요청하며 자료 경계를 유지한다', () => {
     const p = summaryPrompt({ mode: 'text', papers });
-    expect(SUMMARY_PROMPT_VERSION).toBe('summary-v3-gemini');
+    expect(SUMMARY_PROMPT_VERSION).toBe('summary-v4-portable');
     expect(p).toContain(`(${SUMMARY_PROMPT_VERSION})`);
     const headings = ['### 1. 조사 질문과 전체 결론', '### 2. 연구군 지도와 접근법의 차이', '### 3. 논문별 핵심 설명', '### 4. 논문 간 비교와 종합 해석', '### 5. 다른 사람에게 설명하는 종합 문단', '### 6. 남은 질문과 확인할 근거', '### 7. 다시 확인할 곳'];
     const positions = headings.map(h => p.indexOf(h));
