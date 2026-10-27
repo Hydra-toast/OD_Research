@@ -27,6 +27,11 @@ export function candidateUrls(p) {
   return [...new Set([f.pdfUrl, f.contentPdfUrl, ...(f.locationPdfUrls || [])].filter(Boolean))];
 }
 
+/** @param {any} value */
+function safeExternalUrl(value) {
+  try { const url = new URL(value); return url.protocol === 'https:' ? url.href : ''; } catch { return ''; }
+}
+
 /** 카드 안의 원문 상태. @param {any} S @param {any} p */
 export function fulltextLine(S, p) {
   if (S.dataMode !== 'real' || p.origin === 'user') return '';
@@ -34,19 +39,21 @@ export function fulltextLine(S, p) {
   const challenged = st?.status === 'challenge_required' || st?.lastError === 'challenge_required';
   const doi = String(p.doi || '').trim().replace(/^https?:\/\/(?:dx\.)?doi\.org\//i, '');
   const validDoi = doi.length <= 300 && /^10\.\d{4,9}\/[^\s<>"#?]+$/i.test(doi);
-  const manual = challenged ? `<div class="notice" data-ft-challenge="${h(p.id)}"><p>브라우저에서 로봇 확인을 직접 진행하세요. 확인 후 그 페이지에서 PDF를 받았다면 아래 ‘내 PDF 올리기’로 이 논문에 연결할 수 있어요.</p>
+  const manual = challenged ? `<div class="notice" data-ft-challenge="${h(p.id)}"><p>브라우저에서 로봇 확인을 직접 진행하세요. 받은 PDF는 선택한 조사 폴더에 넣고 폴더 확인으로 연결할 수 있어요.</p>
     <div class="row">${['https://sci-hub.st', 'https://sci-hub.ru', 'https://sci-hub.kr'].map(origin => `<a class="btn small" href="${h(origin + (validDoi ? '/' + encodeURI(doi) : '/'))}" target="_blank" rel="noopener noreferrer">${new URL(origin).hostname}에서 직접 확인</a>`).join('')}</div>
-    <p class="hint">브라우저의 확인 결과와 쿠키는 자동 다운로드 서버에 전달되지 않아요. ‘Sci-Hub 다시 시도’를 눌러도 로봇 확인이 반복될 수 있어요. 받은 PDF를 올리면 본문을 추출해 분석 자료에 포함합니다.</p></div>` : '';
+    <p class="hint">사이트에서 직접 확인해 주세요. 연결 가능 여부는 각 사이트의 응답에 따라 달라집니다.</p></div>` : '';
   const receiving = (S.fulltextActive || []).includes(p.id);
   const cands = candidateUrls(p);
+  const publicUrl = [...cands, p.link, validDoi ? `https://doi.org/${doi}` : ''].map(safeExternalUrl).find(Boolean) || '';
+  const sciUrl = validDoi ? `https://sci-hub.kr/${encodeURI(doi)}` : '';
   const proxy = proxyPrefix();
   const lib = proxy && p.doi ? `<a class="btn small" href="${h(proxy + 'https://doi.org/' + p.doi)}" target="_blank" rel="noopener noreferrer">도서관으로 열기</a>` : '';
   const state = receiving ? '원문 받는 중'
     : st ? (st.status === 'extracted' ? `원문 텍스트 ${st.pageCount}쪽 확보` : ftLabel(st.status))
     : (cands.length ? '공개 원문 후보 있음' : '공개 원문 후보 없음');
   return `<p data-ft-state="${h(p.id)}">${h(state)}${st?.source === '로컬 폴더에서 가져온 PDF' ? ' · 로컬 폴더에서 가져온 PDF' : ''}${st?.lastError ? ` · 최근 시도: ${h(ftLabel(st.lastError))}(기존 자료 유지)` : ''}</p>
-    <div class="row"><button class="btn small" data-ract="ft-fetch" data-id="${h(p.id)}" ${S.fulltextBusy ? 'disabled' : ''}>${receiving ? '받는 중…' : '공개 원문 받기'}</button>
-    <button class="btn small" data-ract="ft-scihub" data-id="${h(p.id)}" ${S.fulltextBusy || !p.doi ? 'disabled' : ''}>${challenged ? 'Sci-Hub 다시 시도' : 'Sci-Hub 원문 받기'}</button>
+    <div class="row">${publicUrl ? `<a class="btn small" href="${h(publicUrl)}" target="_blank" rel="noopener noreferrer">공개 원문 사이트 열기</a>` : '<span class="hint">공개 원문 주소 없음</span>'}
+    ${sciUrl ? `<a class="btn small" href="${h(sciUrl)}" target="_blank" rel="noopener noreferrer">Sci-Hub 사이트 열기</a>` : '<span class="hint">DOI가 없어 Sci-Hub 링크를 만들 수 없어요</span>'}
     ${st?.pdfAvailable ? `<button class="btn small" data-ract="ft-download" data-id="${h(p.id)}">이전에 보관한 PDF 다운로드</button>` : ''}
     ${lib}<label class="btn small">내 PDF 올리기<input type="file" accept="application/pdf" data-ract="ft-upload" data-id="${h(p.id)}" hidden></label></div>${manual}`;
 }

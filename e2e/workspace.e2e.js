@@ -32,8 +32,7 @@ test('선택한 PC 폴더에 PDF를 저장하고 PDF 본문의 DOI로 연결한�
   await page.locator('[data-ract="folder-select"]').click();
   await expect(page.locator('#folder-status')).toContainText('Research Landscape/');
   await page.locator('#nav-workspace-main').click();
-  await page.locator('.pw-paper-row').first().locator('[data-pact="open-detail"]').click();
-  await page.getByRole('button', { name: '공개 원문 받기', exact: true }).click();
+  await startSingleBulk(page);
   await expect.poll(() => page.evaluate(async () => { const { folderState: f } = await import('/src/controller/folder-state.js'); let n = 0; for await (const _ of f.directory.values()) n++; return n; })).toBe(1);
   await page.evaluate(async () => { const { folderState: f } = await import('/src/controller/folder-state.js'); const [key, entry] = f.directory.entries.entries().next().value; f.directory.entries.delete(key); entry.name = '이름이 다른 파일.pdf'; f.directory.entries.set(entry.name, entry); });
   await page.locator('#nav-settings').click();
@@ -59,6 +58,32 @@ async function searchFixture(page) {
   await page.getByRole('button', { name: '찾기', exact: true }).click();
   await expect(page.locator('.pw-paper-row')).toHaveCount(30);
 }
+
+async function startSingleBulk(page) {
+  await page.evaluate(async () => {
+    const { S } = await import('/src/state/store.js');
+    const { render } = await import('/src/controller/render.js');
+    S.selPapers = [S.papers[0].id]; S.pTask = 'cluster'; render();
+  });
+  await page.locator('[data-ract="ft-bulk"]').first().click();
+}
+
+test('개별 원문 작업은 해당 사이트를 새 탭으로 직접 연다', async ({ page }) => {
+  await searchFixture(page);
+  await page.evaluate(async () => {
+    const { S } = await import('/src/state/store.js');
+    S.papers[0].origin = 'provider'; S.papers[0].doi = '10.1234/fixture.123';
+    S.papers[0].fulltext = { pdfUrl: 'https://example.org/article.pdf' };
+  });
+  await page.locator('.pw-paper-row').first().locator('[data-pact="open-detail"]').click();
+  const pub = page.getByRole('link', { name: '공개 원문 사이트 열기' });
+  const sci = page.getByRole('link', { name: 'Sci-Hub 사이트 열기' });
+  await expect(pub).toHaveAttribute('href', 'https://example.org/article.pdf');
+  await expect(sci).toHaveAttribute('href', 'https://sci-hub.kr/10.1234/fixture.123');
+  await expect(pub).toHaveAttribute('target', '_blank');
+  await expect(sci).toHaveAttribute('target', '_blank');
+  await expect(page.locator('[data-ract="ft-fetch"], [data-ract="ft-scihub"]')).toHaveCount(0);
+});
 
 test('기본 화면 통합, 이전 주소 연결, 예시 모음과 저장 표시', async ({ page, request }) => {
   const old = await request.get('/parallel.html?project=p-old1', { maxRedirects: 0 });
@@ -139,8 +164,7 @@ test('원문 받기에서 새 PDF는 직접 다운로드하고 브라우저 DB�
     const { render } = await import('/src/controller/render.js');
     S.papers[0].origin = 'provider'; render();
   });
-  await page.locator('.pw-paper-row').first().locator('[data-pact="open-detail"]').click();
-  const [file] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: '공개 원문 받기', exact: true }).click()]);
+  const [file] = await Promise.all([page.waitForEvent('download'), startSingleBulk(page)]);
   expect(await file.failure()).toBeNull();
   expect(requestBody.saveLocal).toBe(false);
   await expect.poll(() => page.evaluate(async () => {
