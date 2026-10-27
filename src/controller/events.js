@@ -113,7 +113,7 @@ export function initEvents() {
       case 'toggle-compare': S.compare = S.compare.includes(id) ? S.compare.filter((/** @type {string} */ x) => x !== id) : [...S.compare, id].slice(-3); render(); break;
       case 'goto-prepare': setTab('prepare'); $('#panel-prepare h2')?.focus(); break;
       case 'goto-explore': setTab('explore'); break;
-      case 'go-home': goHome(); $('#brief').focus(); break;
+      case 'go-home': await goHome(); if (S.status === 'idle') $('#brief')?.focus(); break;
       case 'lab-toggle': S.labOpen = !S.labOpen; render(); break;
       case 'lab-example': S.lab = { ...EXAMPLE_LAB, papers: '' }; touch(); break;
       case 'lab-clear': S.lab = null; touch(); break;

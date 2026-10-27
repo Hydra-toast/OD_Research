@@ -11,20 +11,26 @@ body[data-layout="workspace"] nav a[aria-current="page"] {
 body[data-layout="workspace"].has-workspace:not(.has-search-edit) {
   height: 100vh;
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
 body[data-layout="workspace"].has-workspace:not(.has-search-edit) #main {
-  height: calc(100vh - 64px);
+  flex: 1 1 0;
+  min-height: 0;
   overflow: hidden;
 }
 
 body[data-layout="workspace"].has-workspace.has-search-edit {
   height: 100vh;
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
 body[data-layout="workspace"].has-workspace.has-search-edit #main {
-  height: calc(100vh - 64px);
+  flex: 1 1 0;
+  min-height: 0;
   overflow-y: auto;
 }
 
@@ -35,13 +41,16 @@ body[data-layout="workspace"].has-workspace.has-search-edit .hero {
 }
 
 body[data-layout="workspace"].has-workspace #workspace {
-  height: calc(100vh - 64px);
+  height: 100%;
   padding-block: 12px;
   border-top: 0;
   display: flex;
   flex-direction: column;
   gap: 12px;
 }
+
+body[data-layout="workspace"].has-workspace .site-header { flex: 0 0 auto; }
+body[data-layout="workspace"].has-workspace .foot { display: none; }
 
 /* 검색 후 작업 헤더 (조사 주제 · 검색 수정 · 수집/선택/비교/원문 수 · 수신함 알림 · 설정·관리 · 저장 상태) */
 body[data-layout="workspace"] .pw-header {
@@ -118,6 +127,17 @@ body[data-layout="workspace"] .pw-header-right {
   flex-wrap: wrap;
 }
 
+body[data-layout="workspace"] .pw-new-research {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent);
+  font-weight: 700;
+}
+
+body[data-layout="workspace"] .pw-new-research:hover {
+  background: #d5eeeb;
+}
+
 body[data-layout="workspace"] .pw-inbox-alert {
   border-color: var(--warn, #b45309);
   background: #fffbeb;
@@ -185,7 +205,14 @@ body[data-layout="workspace"] .pw-list-head {
 }
 
 body[data-layout="workspace"] .pw-list-toolbar {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
+}
+
+body[data-layout="workspace"] .pw-list-toolbar .btn {
+  min-width: 0;
+  white-space: nowrap;
 }
 
 body[data-layout="workspace"] .pw-inline-label {
@@ -239,6 +266,7 @@ body[data-layout="workspace"] .pw-pcode {
 
 body[data-layout="workspace"] .pw-row-h3 {
   min-width: 0;
+  min-height: 2.8em;
   margin: 0;
   font-size: 1rem;
   line-height: 1.4;
@@ -275,11 +303,10 @@ body[data-layout="workspace"] .pw-row-bottom {
 }
 
 body[data-layout="workspace"] .pw-row-actions {
-  display: flex;
-  justify-content: flex-end;
-  align-items: center;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 64px;
+  align-items: start;
   gap: 6px;
-  flex-wrap: wrap;
   min-width: 0;
 }
 
@@ -296,7 +323,13 @@ body[data-layout="workspace"] .pw-row-actions .tag {
 }
 
 body[data-layout="workspace"] .pw-compare-btn {
-  flex: 0 0 auto;
+  width: 64px;
+}
+
+@media (max-width: 420px) {
+  body[data-layout="workspace"] .pw-list-toolbar {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 body[data-layout="workspace"] .pw-author-year {

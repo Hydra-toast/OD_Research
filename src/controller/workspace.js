@@ -95,11 +95,14 @@ export function initWorkspace() {
     const t = /** @type {any} */ (e.target);
     if (!t?.name || t.type === 'file') return;
     S.pFormDrafts ??= {};
-    if (t.name === 'answer' && t.closest('form[data-rform="gpt-import"]')) S.pFormDrafts['gpt-import:answer'] = t.value;
+    let changed = false;
+    if (t.name === 'answer' && t.closest('form[data-rform="gpt-import"]')) { S.pFormDrafts['gpt-import:answer'] = t.value; changed = true; }
     for (const sel of ['#adjust-form', '#add-form', 'form[data-rform="refine"]']) {
       if (!t.closest(sel)) continue;
       S.pFormDrafts[`${sel}:${t.name}:${t.type === 'radio' ? t.value : ''}`] = ['checkbox', 'radio'].includes(t.type) ? t.checked : t.value;
+      changed = true;
     }
+    if (changed) scheduleSave();
   };
   document.addEventListener('input', rememberForm);
   document.addEventListener('change', rememberForm);
@@ -220,6 +223,7 @@ export function initWorkspace() {
         S.pWorkScrollByTask ??= { detail: 0, cluster: 0, utilize: 0 };
         S.pWorkScrollByTask.detail = 0;
         S.pMobilePane = 'work';
+        scheduleSave();
         render();
         $('#p-detail-title')?.focus?.({ preventScroll: true });
         break;
@@ -239,6 +243,7 @@ export function initWorkspace() {
           }
         }
         S.pMobilePane = 'work';
+        scheduleSave();
         render();
         $(`#ptab-${workspaceTaskOf(S)}`)?.focus?.({ preventScroll: true });
         break;
@@ -254,6 +259,7 @@ export function initWorkspace() {
           S.pUtilizeSub = sub;
         }
         S.pMobilePane = 'work';
+        scheduleSave();
         render();
         $(`#pusub-${workspaceUtilizeSubOf(S)}`)?.focus?.({ preventScroll: true });
         break;
@@ -277,6 +283,7 @@ export function initWorkspace() {
           const latest = S.summaries[S.summaries.length - 1];
           S.summaryDraft = latest.md;
           S.summaryDraftIds = latest.paperIds;
+          S.summaryDraftPromptVersion = latest.promptVersion || '';
         }
         render();
         break;
@@ -288,6 +295,7 @@ export function initWorkspace() {
           S.pTask = S.pPrevTaskBeforeCompare && S.pPrevTaskBeforeCompare !== 'utilize' ? S.pPrevTaskBeforeCompare : 'cluster';
         }
         S.pMobilePane = pane;
+        scheduleSave();
         render();
         if (pane === 'list') {
           const listEl = $('#panel-explore .pw-list-scroll');

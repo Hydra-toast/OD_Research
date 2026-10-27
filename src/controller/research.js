@@ -318,6 +318,7 @@ function addVersion(/** @type {string} */ md, /** @type {string[]} */ ids, /** @
   const paperRefs = ids.map(id => { const p = paperById(id); return { id, title: p?.title || '제목 확인 필요', doi: p?.doi || '' }; });
   S.summaries.push({ id: `s${S.summaries.length + 1}-${Date.now().toString(36)}`, at: new Date().toISOString(), md, paperIds: ids, paperRefs, promptVersion: SUMMARY_PROMPT_VERSION, source, checks: checkSummaryMd(md, ids.length) });
   S.summaryDraft = md; S.summaryDraftIds = ids;
+  S.summaryDraftPromptVersion = SUMMARY_PROMPT_VERSION;
 }
 
 function handoffContext(/** @type {string} */ purpose) {
@@ -460,6 +461,7 @@ export function initResearch() {
         if (v) {
           S.summaryDraft = v.md;
           S.summaryDraftIds = v.paperIds;
+          S.summaryDraftPromptVersion = v.promptVersion || '';
           if (isWorkspaceLayout()) {
             S.pSummaryViewMode = 'edit';
             S.pView = 'main';
@@ -472,7 +474,12 @@ export function initResearch() {
       case 'summary-dl': { const v = id === '__draft' ? { md: S.summaryDraft } : S.summaries.find((/** @type {any} */ x) => x.id === id); if (v) download('research-summary.md', v.md); break; }
       case 'summary-save-draft':
         if (S.summaryDraft.trim()) {
+          const draftVersion = S.summaryDraftPromptVersion;
           addVersion(S.summaryDraft, S.summaryDraftIds.length ? S.summaryDraftIds : S.selPapers, 'user');
+          if (draftVersion === SHORTLIST_PROMPT_VERSION) {
+            S.summaries[S.summaries.length - 1].promptVersion = SHORTLIST_PROMPT_VERSION;
+            S.summaryDraftPromptVersion = SHORTLIST_PROMPT_VERSION;
+          }
           if (isWorkspaceLayout()) S.pSummaryViewMode = 'read';
           S.summaryMsg = '새 버전으로 저장했어요.';
           touch();
@@ -549,6 +556,7 @@ export function initResearch() {
       addVersion(md, [...ids], 'external');
       if (picked?.ok) {
         S.summaries[S.summaries.length - 1].promptVersion = SHORTLIST_PROMPT_VERSION;
+        S.summaryDraftPromptVersion = SHORTLIST_PROMPT_VERSION;
         S.selPapers = [...picked.ids];
         S.pShowSelectedOnly = true;
         S.pListScrollTop = 0;
@@ -611,8 +619,8 @@ export function initResearch() {
     }
     else if (a === 'summary-mode') { S.summaryMode = t.value === 'text' ? 'text' : 'attachments'; S.summaryPrompt = ''; S.summaryMsg = '방식을 바꿨어요. 프롬프트를 다시 만드세요.'; render(); }
     else if (a === 'summary-request') { S.summaryRequest = t.value; if (isWorkspaceLayout()) scheduleSave(); }
-    else if (a === 'summary-prompt-edit') S.summaryPrompt = t.value;
-    else if (a === 'summary-draft') S.summaryDraft = t.value;
+    else if (a === 'summary-prompt-edit') { S.summaryPrompt = t.value; if (isWorkspaceLayout()) scheduleSave(); }
+    else if (a === 'summary-draft') { S.summaryDraft = t.value; if (isWorkspaceLayout()) scheduleSave(); }
     else if (a === 'gpt-purpose') { S.chatgptPurpose = t.value; S.chatgptPending = null; S.chatgptMsg = '목적을 바꿨어요. 프롬프트를 다시 만든 뒤 ChatGPT에 붙여 넣으세요.'; render(); }
     else if (a === 'gpt-focus') S.chatgptFocusId = t.value;
     else if (a === 'gpt-note') { S.chatgptNote = t.value; if (isWorkspaceLayout()) scheduleSave(); }
@@ -624,13 +632,14 @@ export function initResearch() {
     if (!t) return;
     const a = t.dataset?.ract;
     if (a === 'summary-request') { S.summaryRequest = t.value; if (isWorkspaceLayout()) scheduleSave(); }
-    else if (a === 'summary-prompt-edit') S.summaryPrompt = t.value;
-    else if (a === 'summary-draft') S.summaryDraft = t.value;
+    else if (a === 'summary-prompt-edit') { S.summaryPrompt = t.value; if (isWorkspaceLayout()) scheduleSave(); }
+    else if (a === 'summary-draft') { S.summaryDraft = t.value; if (isWorkspaceLayout()) scheduleSave(); }
     else if (a === 'gpt-note') { S.chatgptNote = t.value; if (isWorkspaceLayout()) scheduleSave(); }
     else if (a === 'gpt-prompt') S.chatgptPrompt = t.value;
     else if (isWorkspaceLayout() && t.name === 'md' && t.closest?.('form[data-rform="summary-import"]')) {
       S.pFormDrafts ??= {};
       S.pFormDrafts['summary-import:md'] = t.value;
+      scheduleSave();
     }
   });
   void $;

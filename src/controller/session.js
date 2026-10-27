@@ -7,7 +7,7 @@ import { createSearchRunner } from '../search-runner.js';
 import { validateRecord, fromRecord } from '../state/record.js';
 import { provider, repo } from './deps.js';
 import { render, renderSaved, showWorkspace, setSave, $, isWorkspaceLayout } from './render.js';
-import { scheduleSave, flushSave } from './persist.js';
+import { scheduleSave, flushSave, pendingRecovery } from './persist.js';
 import { refreshAnalysis, cancelAnalysis } from './analysis.js';
 import { setUrl, parseUrl } from './router.js';
 import { planQuery } from '../search/terms.js';
@@ -204,6 +204,9 @@ export async function openProject(id, opt = {}) {
   try { raw = await repo.load(id); }
   catch { if (!openLatest.isLatest(ticket)) return; resetState({ status: 'error' }); render(); return; }
   if (!openLatest.isLatest(ticket)) return;
+  let recovered = false;
+  const pending = pendingRecovery(id, raw);
+  if (pending && (!raw || validateRecord(raw).ok) && validateRecord(pending).ok) { raw = pending; recovered = true; }
   if (!raw) {
     resetState({ status: 'missing', notFoundId: id });
   } else {
@@ -214,7 +217,10 @@ export async function openProject(id, opt = {}) {
   syncWorkspaceBriefInputs(S.input || '');
   setUrl(opt.url ?? 'push');
   render();
-  if (S.status === 'ok') { setSave('이 브라우저에 저장됨(불러옴)', false); refreshAnalysis(); } else setSave('', false);
+  if (S.status === 'ok') {
+    if (recovered) scheduleSave(); else setSave('이 브라우저에 저장됨(불러옴)', false);
+    refreshAnalysis();
+  } else setSave('', false);
   if (!isWorkspaceLayout()) $('#workspace').scrollIntoView?.();
   focusHeading();
 }
@@ -253,10 +259,11 @@ function clearProjectUrl() {
   try { history.replaceState({ project: null, tab: 'explore' }, '', u); } catch { /* 파일 환경 */ }
 }
 
-/** 첫 진입. 새로고침·주소의 조사 번호로는 저장본을 열지 않는다. ?topic=만 새 예시 조사를 시작한다. */
+/** 조사 주소로 진입하거나 새로고침하면 해당 조사를 다시 연다. */
 export async function initFromUrl() {
   const u = parseUrl();
-  if (u.project || u.invalidProject) { clearProjectUrl(); return; }
+  if (u.project) { await openProject(u.project, { tab: u.tab, url: 'none' }); return; }
+  if (u.invalidProject) { clearProjectUrl(); return; }
   if (u.topic && EXAMPLE_TOPICS[u.topic]) {
     await searchExample(u.topic, { url: 'replace' });
     if (u.tab === 'prepare' && S.status === 'ok') { S.tab = 'prepare'; setUrl('replace'); render(); }

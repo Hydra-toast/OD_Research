@@ -26,6 +26,14 @@ export function toRecord(S, scopeText) {
     researchBrief: S.researchBrief ?? null,
     refine: S.refine ?? emptyRefine(), summaries: S.summaries ?? [], fulltext: S.fulltext ?? {}, pdfFolder: safePdfFolder(S.pdfFolder), summaryCtx: S.summaryCtx ?? null,
     summaryRequest: typeof S.summaryRequest === 'string' ? S.summaryRequest : '',
+    workspaceDraft: {
+      forms: S.pFormDrafts ?? {}, summaryDraft: S.summaryDraft || '', summaryDraftIds: S.summaryDraftIds ?? [],
+      summaryDraftPromptVersion: S.summaryDraftPromptVersion || '', summaryPrompt: S.summaryPrompt || '',
+      task: S.pTask, detailId: S.pDetailId, mobilePane: S.pMobilePane, view: S.pView,
+      summaryViewMode: S.pSummaryViewMode, summaryImportOpen: !!S.pSummaryImportOpen,
+      promptPreviewOpen: !!S.pPromptPreviewOpen, filterOpen: !!S.pFilterOpen, addOpen: !!S.addOpen,
+      selectedOnly: !!S.pShowSelectedOnly, settingsTab: S.pSettingsTab, utilizeSub: S.pUtilizeSub,
+    },
     knowledgeImports: S.knowledgeImports ?? [],
     pCompareIds: Array.isArray(S.pCompareIds) ? S.pCompareIds : [],
     aiDirections: S.aiDirections ?? [], aiCompare: S.aiCompare ?? null, aiMemos: S.aiMemos ?? [], chatgptPlan: S.chatgptPlan ?? null, chatgptNote: S.chatgptNote ?? '', reviewStaleAt: S.reviewStaleAt ?? null,
@@ -45,9 +53,32 @@ export function fromRecord(r) {
     refine: normalizeRefine(r.refine),
     summaries: Array.isArray(r.summaries) ? r.summaries : [], fulltext: isObj(r.fulltext) ? r.fulltext : {}, pdfFolder: safePdfFolder(r.pdfFolder), summaryCtx: isObj(r.summaryCtx) ? r.summaryCtx : null,
     summaryRequest: typeof r.summaryRequest === 'string' ? r.summaryRequest : '',
+    ...workspaceDraftState(r.workspaceDraft, validIds),
     knowledgeImports: Array.isArray(r.knowledgeImports) ? r.knowledgeImports : [],
     pCompareIds: Array.isArray(r.pCompareIds) ? r.pCompareIds.filter((/** @type {any} */ id) => typeof id === 'string' && validIds.has(id)).slice(0, 4) : [],
     aiDirections: Array.isArray(r.aiDirections) ? r.aiDirections : [], aiCompare: isObj(r.aiCompare) ? r.aiCompare : null, aiMemos: Array.isArray(r.aiMemos) ? r.aiMemos : [], chatgptPlan: isObj(r.chatgptPlan) ? r.chatgptPlan : null, chatgptNote: typeof r.chatgptNote === 'string' ? r.chatgptNote : '', reviewStaleAt: typeof r.reviewStaleAt === 'string' ? r.reviewStaleAt : null,
+  };
+}
+
+/** 저장된 초안은 기본값과 유효한 값만 복원한다. @param {any} d @param {Set<string>} ids */
+function workspaceDraftState(d, ids) {
+  if (!isObj(d)) return {};
+  const forms = isObj(d.forms) ? Object.fromEntries(Object.entries(d.forms).filter(([, v]) => typeof v === 'string' || typeof v === 'boolean')) : {};
+  return {
+    pFormDrafts: forms,
+    summaryDraft: typeof d.summaryDraft === 'string' ? d.summaryDraft : '',
+    summaryDraftIds: Array.isArray(d.summaryDraftIds) ? d.summaryDraftIds.filter(id => typeof id === 'string' && ids.has(id)) : [],
+    summaryDraftPromptVersion: typeof d.summaryDraftPromptVersion === 'string' ? d.summaryDraftPromptVersion : '',
+    summaryPrompt: typeof d.summaryPrompt === 'string' ? d.summaryPrompt : '',
+    pTask: ['detail', 'cluster', 'utilize'].includes(d.task) ? d.task : 'cluster',
+    pDetailId: typeof d.detailId === 'string' && ids.has(d.detailId) ? d.detailId : null,
+    pMobilePane: ['list', 'work'].includes(d.mobilePane) ? d.mobilePane : 'list',
+    pView: ['main', 'saved', 'how', 'settings'].includes(d.view) ? d.view : 'main',
+    pSummaryViewMode: d.summaryViewMode === 'edit' ? 'edit' : 'read',
+    pSummaryImportOpen: !!d.summaryImportOpen, pPromptPreviewOpen: !!d.promptPreviewOpen,
+    pFilterOpen: !!d.filterOpen, addOpen: !!d.addOpen, pShowSelectedOnly: !!d.selectedOnly,
+    pSettingsTab: ['inbox', 'lab', 'scope', 'versions'].includes(d.settingsTab) ? d.settingsTab : 'inbox',
+    pUtilizeSub: ['compare', 'claims', 'ai', 'export'].includes(d.utilizeSub) ? d.utilizeSub : 'compare',
   };
 }
 

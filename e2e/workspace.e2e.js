@@ -150,6 +150,77 @@ async function startSingleBulk(page) {
   await page.locator('[data-ract="ft-bulk"]').first().click();
 }
 
+test('새 조사는 저장 대기 변경을 보존하고 저장 실패 시 화면에 남는다', async ({ page }) => {
+  await searchFixture(page);
+  const id = await page.evaluate(async () => {
+    const { S } = await import('/src/state/store.js');
+    const { flushSave } = await import('/src/controller/persist.js');
+    await flushSave(); window.__rl.saveDelayMs = 60000; return S.projectId;
+  });
+  const newButton = page.locator('[data-fk="p-new-research"]');
+  await expect(newButton).toHaveText('새 조사');
+  await page.locator('[data-fk="summary-import-md"]').fill('가상 예시 · 저장 대기 중인 입력 [P1]');
+  await page.evaluate(() => { window.__rl.failNextSave = true; });
+  await newButton.click();
+  await expect(page.locator('#workspace')).toBeVisible();
+  await expect(page.locator('#save-state')).toContainText('저장 실패');
+  await expect(page.locator('[data-fk="summary-import-md"]')).toHaveValue('가상 예시 · 저장 대기 중인 입력 [P1]');
+  await page.locator('[data-fk="summary-import-md"]').fill('가상 예시 · 다시 저장한 입력 [P1]');
+  await newButton.click();
+  await expect(page.locator('#workspace')).toBeHidden();
+  await expect(page.locator('#brief')).toBeEmpty();
+  await expect(page.locator('#brief')).toBeFocused();
+  expect(new URL(page.url()).searchParams.has('project')).toBe(false);
+  await page.locator('#nav-saved').click();
+  await page.locator(`[data-act="open-saved"][data-id="${id}"]`).click();
+  await expect(page.locator('[data-fk="summary-import-md"]')).toHaveValue('가상 예시 · 다시 저장한 입력 [P1]');
+});
+
+test('저장 대기 중 새로고침해도 조사와 입력 중인 내용을 다시 연다', async ({ page }) => {
+  await searchFixture(page);
+  const project = await page.evaluate(async () => {
+    const { S } = await import('/src/state/store.js');
+    const { flushSave } = await import('/src/controller/persist.js');
+    await flushSave(); window.__rl.saveDelayMs = 60000; return S.projectId;
+  });
+  await page.locator('[data-fk="summary-import-md"]').fill('가상 예시 · 작성 중인 AI 결과 [P1]');
+  await page.reload();
+  await expect(page.locator('#workspace')).toBeVisible();
+  await expect(page.locator('[data-fk="summary-import-md"]')).toHaveValue('가상 예시 · 작성 중인 AI 결과 [P1]');
+  expect(new URL(page.url()).searchParams.get('project')).toBe(project);
+  await expect(page.locator('.pw-paper-row')).toHaveCount(30);
+  await page.locator('.pw-paper-row').first().locator('[data-pact="open-detail"]').click();
+  await page.locator('[data-act="note"]').fill('가상 예시 · 새로고침 직전 메모');
+  await page.reload();
+  await expect(page.locator('[data-act="note"]')).toHaveValue('가상 예시 · 새로고침 직전 메모');
+  await expect(page.locator('#p-detail-title')).toBeVisible();
+});
+
+test('정리 기록에서 이전 결과의 종류를 구분하고 최신 결과가 추천이어도 편집한다', async ({ page }) => {
+  await searchFixture(page);
+  await page.locator('[data-fk="summary-detail-make"]').click();
+  await page.locator('[data-fk="summary-import-md"]').fill('# 가상 상세 정리\n\n근거 [P1]');
+  await page.locator('[data-import-purpose="detail"]').click();
+  await page.locator('[data-fk="summary-make"]').click();
+  await page.locator('[data-pact="quick-import"]').click();
+  await page.locator('[data-fk="summary-import-md"]').fill('1. [P1] 가상 예시 · 실제 논문 아님\n\n선택 논문: [P1]');
+  await page.locator('[data-import-purpose="shortlist"]').click();
+  await page.locator('[data-pact="open-settings-tab"][data-tab="versions"]').first().click();
+  await expect(page.getByText('상세 정리', { exact: true })).toBeVisible();
+  await expect(page.getByText('1단계 추천', { exact: true })).toBeVisible();
+  await expect(page.getByText('이 조사에서 저장한 정리 (2개)')).toBeVisible();
+  await page.locator('[data-ract="summary-load"]').first().click();
+  await expect(page.locator('[data-ract="summary-draft"]')).toContainText('가상 상세 정리');
+  await page.locator('[data-ract="summary-draft"]').fill('# 수정된 상세 정리\n\n근거 [P1]');
+  await page.locator('[data-ract="summary-save-draft"]').click();
+  await expect(page.locator('[data-knowledge-status]')).toContainText('누적 정리 2건');
+  await page.locator('[data-fk="sm-open-versions"]').click();
+  await page.locator('[data-ract="summary-load"]').nth(1).click();
+  await expect(page.locator('[data-ract="summary-draft"]')).toContainText('선택 논문: [P1]');
+  await page.locator('[data-ract="summary-save-draft"]').click();
+  await expect(page.locator('[data-knowledge-status]')).toContainText('누적 정리 2건');
+});
+
 test('초록 기반 정리와 결과 확인을 원문 받기보다 먼저 안내한다', async ({ page }) => {
   await searchFixture(page);
   for (const width of [1440, 1024, 375]) {
@@ -254,6 +325,40 @@ test('검색 꺼짐을 가상 검색 성공으로 대체하지 않는다', async
   await expect(page.locator('#panel-explore')).toContainText('검색 서버에 연결되지 않았어요');
   await expect(page.locator('.pw-paper-row')).toHaveCount(0);
 });
+test('논문 목록 버튼은 제목 길이와 선택 상태가 바뀌어도 제자리에 있다', async ({ page }) => {
+  await searchFixture(page);
+  await page.evaluate(async () => {
+    const { S } = await import('/src/state/store.js');
+    const { render } = await import('/src/controller/render.js');
+    S.papers[0].title = '가상 예시 · 실제 논문 아님';
+    S.papers[1].title = '가상 예시 · 실제 논문 아님 ' + 'very long research title '.repeat(15);
+    render();
+  });
+  for (const width of [1440, 375]) {
+    await page.setViewportSize({ width, height: 900 });
+    if (width === 375) await page.locator('#pmob-list').click();
+    const rows = page.locator('.pw-paper-row');
+    const relativeCompare = async i => rows.nth(i).evaluate(row => {
+      const r = row.getBoundingClientRect(), b = row.querySelector('.pw-compare-btn').getBoundingClientRect();
+      return { x: b.right - r.right, y: b.top - r.top, width: b.width };
+    });
+    const first = await relativeCompare(0), second = await relativeCompare(1);
+    expect(Math.abs(first.x - second.x)).toBeLessThan(1);
+    expect(Math.abs(first.y - second.y)).toBeLessThan(1);
+    await rows.first().locator('.pw-compare-btn').click();
+    expect(await relativeCompare(0)).toEqual(first);
+    await rows.first().locator('.pw-compare-btn').click();
+    const toolbarPositions = () => page.locator('.pw-list-toolbar > *').evaluateAll(els => els.map(el => { const r = el.getBoundingClientRect(); return [r.x, r.y, r.width, r.height]; }));
+    const before = await toolbarPositions();
+    await page.locator('[data-fk="p-selected-only"]').click();
+    expect(await toolbarPositions()).toEqual(before);
+    await page.locator('[data-fk="p-selected-only"]').click();
+    await page.locator('[data-fk="p-filter-toggle"]').click();
+    expect(await toolbarPositions()).toEqual(before);
+    await page.locator('[data-fk="p-filter-toggle"]').click();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  }
+});
 test('논문 상태와 비교 버튼은 화면 폭에 맞춰 오른쪽 정렬하고 경고 표시는 한 번만 나온다', async ({ page }) => {
   await searchFixture(page);
   await page.evaluate(async () => {
@@ -349,6 +454,7 @@ test('30편 검색, 선택·메모·비교·초점 보존과 저장본 재열기
   await page.reload();
   await page.locator('#nav-saved').click();
   await page.locator('[data-act="open-saved"]').first().click();
+  await page.locator('#ptab-cluster').click();
   await expect(page.locator('#summary-focus')).toHaveValue('분류 기준과 처음 읽을 논문');
   await page.locator(`.pw-paper-row[data-paper-id="${pid}"] [data-pact="open-detail"]`).click();
   await expect(page.locator('[data-act="note"]')).toHaveValue('메모 보존 확인');

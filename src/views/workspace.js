@@ -95,6 +95,7 @@ export function workspaceHeaderHtml(S) {
     <div class="pw-header-right">
       <button type="button" class="btn small" data-pact="view-settings" data-fk="p-open-settings">설정·관리</button>
       <button type="button" class="btn small" data-pact="search-edit-toggle" aria-expanded="${!!S.pSearchEditOpen}" aria-controls="hero-section" data-fk="p-search-edit">${S.pSearchEditOpen ? '검색 수정 닫기' : '검색 수정'}</button>
+      <button type="button" class="btn small pw-new-research" data-act="go-home" data-fk="p-new-research">새 조사</button>
     </div>`;
 }
 
@@ -145,10 +146,10 @@ export function workspaceListHtml(S) {
       <p class="hint">제목을 눌러 초록을 확인하고 읽을 핵심 논문을 3~5편 추려 원문을 등록하세요.</p>
       <div class="toolbar pw-list-toolbar">
         <label class="pw-inline-label">정렬 <select data-act="sort" data-fk="sort">${[['relevance', '관련성'], ['recent', '최신순'], ['citations', '인용순']].map(([v, l]) => `<option value="${v}" ${S.sort === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
-        <button class="btn small" type="button" data-ract="select-toggle" data-fk="p-select-toggle" ${shownIds.length ? '' : 'disabled'}>${allShownSelected ? `현재 목록 ${shownIds.length}편 선택 해제` : `현재 목록 ${shownIds.length}편 전체 선택`}</button>
-        <button class="btn small${S.pShowSelectedOnly ? ' primary' : ''}" type="button" data-pact="toggle-selected-only" aria-pressed="${!!S.pShowSelectedOnly}" data-fk="p-selected-only">${S.pShowSelectedOnly ? `선택한 논문만 보기 해제 (${S.selPapers.length}편)` : `선택한 논문만 보기 (${S.selPapers.length}편)`}</button>
-        <button class="btn small" type="button" data-act="add-toggle" aria-expanded="${S.addOpen}" aria-controls="add-form" data-fk="add-toggle">${S.addOpen ? '닫기' : '논문 직접 추가'}</button>
-        ${S.dataMode === 'real' ? `<button class="btn small" type="button" data-pact="filter-toggle" aria-expanded="${!!S.pFilterOpen}" data-fk="p-filter-toggle">${S.pFilterOpen ? '거르기 닫기' : '거르기'}</button>` : ''}
+        <button class="btn small" type="button" data-ract="select-toggle" data-fk="p-select-toggle" ${shownIds.length ? '' : 'disabled'}>${allShownSelected ? '선택 해제' : '모두 선택'}</button>
+        <button class="btn small${S.pShowSelectedOnly ? ' primary' : ''}" type="button" data-pact="toggle-selected-only" aria-pressed="${!!S.pShowSelectedOnly}" data-fk="p-selected-only">선택 논문만</button>
+        <button class="btn small${S.addOpen ? ' primary' : ''}" type="button" data-act="add-toggle" aria-expanded="${S.addOpen}" aria-controls="add-form" data-fk="add-toggle">논문 직접 추가</button>
+        ${S.dataMode === 'real' ? `<button class="btn small${S.pFilterOpen ? ' primary' : ''}" type="button" data-pact="filter-toggle" aria-expanded="${!!S.pFilterOpen}" data-fk="p-filter-toggle">거르기</button>` : ''}
       </div>
       ${S.pCompareMsg ? `<p class="notice pw-compare-notice" role="status">${h(S.pCompareMsg)} <button type="button" class="btn small" data-pact="dismiss-compare-msg">확인</button></p>` : ''}
     </div>
@@ -164,7 +165,7 @@ export function workspaceListHtml(S) {
             const pNum = baseIdx >= 0 ? baseIdx + 1 : i + 1;
             return workspacePaperRow(S, it, pNum, activeId);
           }).join('')
-        : `<p class="card">${S.pShowSelectedOnly ? '현재 선택된 논문이 없어요. ‘선택한 논문만 보기 해제’를 눌러 전체 목록에서 논문을 골라 주세요.' : '조건에 맞는 논문이 없어요. 거르기 조건을 줄이거나 설정·관리에서 범위를 초기화해 보세요.'}</p>`}
+        : `<p class="card">${S.pShowSelectedOnly ? '현재 선택된 논문이 없어요. ‘선택 논문만’을 다시 눌러 전체 목록에서 논문을 골라 주세요.' : '조건에 맞는 논문이 없어요. 거르기 조건을 줄이거나 설정·관리에서 범위를 초기화해 보세요.'}</p>`}
       ${!S.pShowSelectedOnly && S.dataMode !== 'real' && matched.length > EXAMPLE_CAP ? `<button class="btn" type="button" data-act="more" data-fk="more">${S.showAll ? '접기' : `추가 결과 펼치기 (${matched.length - EXAMPLE_CAP}편)`}</button>` : ''}
       ${S.dataMode === 'real' && S.estimatedTotal != null && S.papers.length < S.estimatedTotal ? `<button class="btn" type="button" data-act="more-remote" data-fk="more-remote">다음 50편 수집</button>` : ''}
     </div>`;
@@ -504,13 +505,13 @@ export function workspaceClusterHtml(S) {
 
 /** 최신 정리본 읽기/편집 분리 카드. @param {any} S @param {any} latest @param {number} totalCount */
 function workspaceLatestSummaryCard(S, latest, totalCount) {
-  if (latest.promptVersion === SHORTLIST_PROMPT_VERSION) {
+  if (latest.promptVersion === SHORTLIST_PROMPT_VERSION && S.pSummaryViewMode !== 'edit') {
     const picked = parseShortlist(latest.md, latest.paperIds, S.papers.map(p => p.id));
     return `<section class="card stack" aria-labelledby="sm-latest-h">
       <h2 id="sm-latest-h" style="font-size:1.125rem" tabindex="-1">1단계 추천 논문 ${picked.ids.length}편</h2>
       <p class="hint">추천 이유는 AI 대화에서 확인하세요. 아래 논문을 바탕으로 원문 확보를 진행할 수 있습니다. 현재 선택은 왼쪽 목록에서 조정할 수 있습니다.</p>
       <div class="row">${picked.ids.map(id => `<button type="button" class="btn small" data-pact="open-detail" data-id="${h(id)}">[P${latest.paperIds.indexOf(id) + 1}] ${h(paperById(id, S)?.title || id)}</button>`).join('')}</div>
-      <div class="row"><button type="button" class="btn small" data-ract="summary-dl" data-id="${h(latest.id)}">원래 결과 .md 저장</button><button type="button" class="btn small" data-pact="open-settings-tab" data-tab="versions">이전 버전 관리 (${totalCount}개)</button></div>
+      <div class="row"><button type="button" class="btn small" data-ract="summary-dl" data-id="${h(latest.id)}">원래 결과 .md 저장</button><button type="button" class="btn small" data-pact="open-settings-tab" data-tab="versions">저장한 정리 기록 (${totalCount}개)</button></div>
     </section>`;
   }
   const isEdit = S.pSummaryViewMode === 'edit';
@@ -519,15 +520,15 @@ function workspaceLatestSummaryCard(S, latest, totalCount) {
   return `<section class="card stack pw-latest-summary" aria-labelledby="sm-latest-h">
     <div class="pw-section-head">
       <div>
-        <h2 id="sm-latest-h" style="font-size:1.25rem" tabindex="-1">최신 정리본 (${h(latest.at.slice(0, 16).replace('T', ' '))})</h2>
-        <p class="meta">${latest.source === 'user' ? tag('info', '사용자 수정본') : tag('info', 'AI 정리본')} · 대상 논문 ${latest.paperIds.length}편 · 출처 표시 ${c.refCount ?? 0}곳 · 표 ${c.tables ?? 0}개</p>
+        <h2 id="sm-latest-h" style="font-size:1.25rem" tabindex="-1">${isEdit ? '불러온 정리본 편집' : `최신 정리본 (${h(latest.at.slice(0, 16).replace('T', ' '))})`}</h2>
+        ${isEdit ? '<p class="meta">수정 후 새 버전으로 저장할 수 있어요.</p>' : `<p class="meta">${latest.source === 'user' ? tag('info', '사용자 수정본') : tag('info', 'AI 정리본')} · 대상 논문 ${latest.paperIds.length}편 · 출처 표시 ${c.refCount ?? 0}곳 · 표 ${c.tables ?? 0}개</p>`}
       </div>
       <div class="row" style="margin:0">
         <button type="button" class="btn small${!isEdit ? ' primary' : ''}" data-pact="summary-view-mode" data-mode="read" data-fk="sm-mode-read">읽기 표시</button>
         <button type="button" class="btn small${isEdit ? ' primary' : ''}" data-pact="summary-view-mode" data-mode="edit" data-fk="sm-mode-edit">편집하기</button>
-        <button type="button" class="btn small" data-ract="summary-dl" data-id="${h(latest.id)}">.md 저장</button>
-        <button type="button" class="btn small" data-ract="summary-develop" data-id="${h(latest.id)}">더 발전시키는 프롬프트</button>
-        <button type="button" class="btn small" data-pact="open-settings-tab" data-tab="versions" data-fk="sm-open-versions">이전 버전 관리 (${totalCount}개)</button>
+        ${isEdit ? '' : `<button type="button" class="btn small" data-ract="summary-dl" data-id="${h(latest.id)}">.md 저장</button>
+        <button type="button" class="btn small" data-ract="summary-develop" data-id="${h(latest.id)}">이 내용으로 AI에 다시 요청</button>`}
+        <button type="button" class="btn small" data-pact="open-settings-tab" data-tab="versions" data-fk="sm-open-versions">저장한 정리 기록 (${totalCount}개)</button>
       </div>
     </div>
     ${isEdit
@@ -758,7 +759,7 @@ export function workspaceSettingsHtml(S) {
     ['inbox', 'PDF 저장 폴더'],
     ['lab', '우리 연구실 정보'],
     ['scope', `조사 기준·범위·검색 기록 (${roundCount})`],
-    ['versions', `이전 정리본 관리 (${verCount})`],
+    ['versions', `정리 기록 (${verCount})`],
   ];
 
   let body = '';
@@ -808,15 +809,16 @@ export function workspaceSettingsHtml(S) {
     const ver = S.summaries || [];
     const draftIds = S.summaryDraftIds || [];
     body = `<section class="card stack">
-      <h3>이전 정리본 관리 (${ver.length}개)</h3>
-      <p class="hint">새로운 정리 결과를 가져오거나 편집해 저장해도 이전 버전은 덮어쓰지 않고 모두 여기에 보관됩니다.</p>
+      <h3>이 조사에서 저장한 정리 (${ver.length}개)</h3>
+      <p class="hint">AI 결과를 가져오거나 정리본을 수정해 저장하면 여기에 쌓입니다. 이전 내용은 그대로 남아요.</p>
+      <p class="hint">열어서 수정하거나 파일로 저장할 수 있어요. 다시 AI에 정리를 요청할 때는 프롬프트와 필요한 파일을 직접 전달합니다.</p>
       ${ver.length ? `<ol class="stack">${ver.map((/** @type {any} */ v, /** @type {number} */ idx) => `<li class="card paper-row">
         <div class="pw-section-head">
-          <span><strong>#${idx + 1}</strong> · ${h(v.at.slice(0, 16).replace('T', ' '))} · ${v.source === 'user' ? '내가 고침' : 'AI 정리본'} · 논문 ${v.paperIds.length}편</span>
+          <span><strong>${v.promptVersion === SHORTLIST_PROMPT_VERSION ? '1단계 추천' : v.source === 'user' ? '직접 수정한 정리' : v.promptVersion === SUMMARY_PROMPT_VERSION ? '상세 정리' : '이전 정리'}</strong> · ${h(v.at.slice(0, 16).replace('T', ' '))} · 기록 #${idx + 1} · 대상 논문 ${v.paperIds.length}편</span>
           <div class="row" style="margin:0">
-            <button class="btn small" type="button" data-ract="summary-load" data-id="${h(v.id)}">편집창으로 불러오기</button>
-            <button class="btn small" type="button" data-ract="summary-dl" data-id="${h(v.id)}">.md 저장</button>
-            <button class="btn small" type="button" data-ract="summary-develop" data-id="${h(v.id)}">더 발전시키는 프롬프트</button>
+            <button class="btn small" type="button" data-ract="summary-load" data-id="${h(v.id)}">열어서 수정</button>
+            <button class="btn small" type="button" data-ract="summary-dl" data-id="${h(v.id)}">파일로 저장 (.md)</button>
+            <button class="btn small" type="button" data-ract="summary-develop" data-id="${h(v.id)}">이 내용으로 AI에 다시 요청</button>
           </div>
         </div>
       </li>`).join('')}</ol>` : '<p>아직 저장한 정리본이 없어요.</p>'}
@@ -830,7 +832,7 @@ export function workspaceSettingsHtml(S) {
       <h2 id="settings-title" tabindex="-1">설정·관리</h2>
       <button type="button" class="btn" data-pact="view-main" data-fk="settings-back">← 작업 화면으로 돌아가기</button>
     </div>
-    <p class="hint">PC 연결·PDF 수신함, 연구실 정보, 조사 기준·범위 조정과 검색 기록, 이전 정리본 버전을 한곳에서 관리합니다.</p>
+    <p class="hint">PDF 저장 폴더, 연구실 정보, 조사 기준과 검색 기록, 저장한 정리를 관리합니다.</p>
     <div role="tablist" aria-label="설정·관리 항목" class="tabs pw-subtabs">
       ${tabs.map(([k, label]) => `<button role="tab" type="button" id="pset-${k}" class="tab pw-subtab" data-pact="settings-tab" data-tab="${k}" aria-selected="${tab === k}" tabindex="${tab === k ? '0' : '-1'}" data-fk="pset-${k}">${h(label)}</button>`).join('')}
     </div>
