@@ -37,7 +37,7 @@ function safeExternalUrl(value) {
 }
 
 /** 키를 브라우저에 내보내지 않고 OpenAlex 원문 경로의 논문 ID만 서버에 전달한다. @param {any} value */
-function openAlexPdfPath(value) {
+export function openAlexPdfPath(value) {
   try {
     const u = new URL(value);
     const match = u.protocol === 'https:' && u.hostname.toLowerCase() === 'content.openalex.org' && !u.username && !u.password && /^\/works\/(W\d{1,20})\.pdf$/.exec(u.pathname);

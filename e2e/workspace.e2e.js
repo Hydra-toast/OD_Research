@@ -395,3 +395,25 @@ test('구버전 프롬프트로 받은 실제 형식의 1단계 결과도 추천
   await expect(page.locator('[data-fk="p-selected-only"]')).toHaveAttribute('aria-pressed', 'true');
   await expect(page.locator('[data-summary-read]')).toHaveCount(0);
 });
+
+
+test('일괄 받기는 OpenAlex 인증 경로의 PDF를 직접 저장하고 텍스트를 연결한다', async ({ page }) => {
+  const pdf = fixturePdf('Example OpenAlex article with enough text for extraction.');
+  let openCount = 0, legacyCount = 0;
+  await page.route('**/api/openalex-pdf?work=W123', r => { openCount++; return r.fulfill({ status: 200, headers: { 'content-type': 'application/pdf' }, body: pdf }); });
+  await page.route('**/api/fulltext/fetch', r => { legacyCount++; return r.fulfill({ json: { status: 'failed' } }); });
+  await searchFixture(page);
+  await page.evaluate(async () => {
+    const { S } = await import('/src/state/store.js');
+    S.papers[0].origin = 'provider';
+    S.papers[0].fulltext = { contentPdfUrl: 'https://content.openalex.org/works/W123.pdf' };
+  });
+  const downloadPromise = page.waitForEvent('download');
+  await startSingleBulk(page);
+  const download = await downloadPromise;
+  expect(download.suggestedFilename()).toMatch(/\.pdf$/);
+  await expect.poll(() => page.evaluate(async () => (await import('/src/state/store.js')).S.fulltext[(await import('/src/state/store.js')).S.papers[0].id]?.status)).toBe('extracted');
+  expect(openCount).toBe(1);
+  expect(legacyCount).toBe(0);
+  await expect(page.locator('#bulk-h')).toContainText('확보 1');
+});

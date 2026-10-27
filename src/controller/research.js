@@ -10,7 +10,7 @@ import { ruleRank, RANK_VERSION } from '../research/rank.js';
 import { suggestKeywords } from '../research/keywords.js';
 import { summaryPrompt, checkSummaryMd, SUMMARY_PROMPT_VERSION, SHORTLIST_PROMPT_VERSION, parseShortlist } from '../research/summary.js';
 import { buildHandoff, parseHandoff, pickPapers, basisVersion } from '../research/handoff.js';
-import { candidateUrls, ftLabel } from '../views/research.js';
+import { candidateUrls, ftLabel, openAlexPdfPath } from '../views/research.js';
 import { saveFulltext, loadFulltext, loadFulltextPdf } from '../repository/idb.js';
 import { savePdfToFolder } from './folder.js';
 
@@ -71,13 +71,13 @@ function downloadPdfBlob(/** @type {Blob} */ pdf, /** @type {any} */ paper) {
   document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 60000);
 }
 
-async function storeResult(/** @type {any} */ paper, /** @type {any} */ r, downloadPdf = false) {
+async function storeResult(/** @type {any} */ paper, /** @type {any} */ r, downloadPdf = false, /** @type {Blob|null} */ pdfBlob = null) {
   const old = S.fulltext[paper.id];
   if (!['extracted', 'scan_only'].includes(r.status) && ['extracted', 'scan_only'].includes(old?.status)) {
     S.fulltext[paper.id] = { ...old, lastError: r.status }; return;
   }
-  if (downloadPdf && r.pdfBase64 && ['extracted', 'scan_only'].includes(r.status)) {
-    const pdf = new Blob([Uint8Array.from(atob(r.pdfBase64), c => c.charCodeAt(0))], { type: 'application/pdf' });
+  if (downloadPdf && (pdfBlob || r.pdfBase64) && ['extracted', 'scan_only'].includes(r.status)) {
+    const pdf = pdfBlob || new Blob([Uint8Array.from(atob(r.pdfBase64), c => c.charCodeAt(0))], { type: 'application/pdf' });
     try { if (!(await savePdfToFolder(pdf, paper))) downloadPdfBlob(pdf, paper); }
     catch { downloadPdfBlob(pdf, paper); S.fulltextMsg = '선택한 폴더에 저장하지 못해 브라우저 다운로드를 요청했습니다.'; }
   }
@@ -100,6 +100,42 @@ function downloadFields() {
 
 async function requestOpen(/** @type {any} */ paper, /** @type {AbortSignal} */ signal) {
   const projectId = S.projectId;
+  const openAlexPath = candidateUrls(paper).map(openAlexPdfPath).find(Boolean);
+  if (openAlexPath) {
+    try {
+      const res = await fetch(openAlexPath, { signal });
+      if (signal.aborted || S.projectId !== projectId) return 'aborted';
+      if (res.ok && (res.headers.get('content-type') || '').toLowerCase().includes('application/pdf')) {
+        const announced = Number(res.headers.get('content-length') || 0);
+        if (announced > 20 * 1024 * 1024) { await storeResult(paper, { status: 'too_large' }); return 'too_large'; }
+        const pdf = await res.blob();
+        if (signal.aborted || S.projectId !== projectId) return 'aborted';
+        if (pdf.size > 20 * 1024 * 1024) { await storeResult(paper, { status: 'too_large' }); return 'too_large'; }
+        const pdfModuleUrl = new URL('../vendor/pdf.min.mjs', import.meta.url).href;
+        const pdfjs = await import(pdfModuleUrl);
+        pdfjs.GlobalWorkerOptions.workerSrc = new URL('../vendor/pdf.worker.min.mjs', import.meta.url).href;
+        const task = pdfjs.getDocument({ data: new Uint8Array(await pdf.arrayBuffer()), isEvalSupported: false });
+        const pages = [];
+        let pageCount = 0;
+        try {
+          const doc = await task.promise;
+          pageCount = doc.numPages;
+          for (let n = 1; n <= Math.min(pageCount, 100); n++) {
+            if (signal.aborted || S.projectId !== projectId) return 'aborted';
+            const page = await doc.getPage(n), content = await page.getTextContent();
+            pages.push({ page: n, text: content.items.map((/** @type {any} */ x) => x.str || '').join(' ').replace(/\s+/g, ' ').trim() });
+            page.cleanup();
+          }
+        } finally { await task.destroy(); }
+        if (signal.aborted || S.projectId !== projectId) return 'aborted';
+        const status = pages.reduce((n, p) => n + p.text.length, 0) < 20 ? 'scan_only' : 'extracted';
+        await storeResult(paper, { status, pages, pageCount, truncatedPages: pageCount > 100, source: 'OpenAlex', extractor: 'pdfjs-dist', pdfBytes: pdf.size }, true, pdf);
+        return S.fulltext[paper.id]?.status || status;
+      }
+    } catch (e) {
+      if (signal.aborted || S.projectId !== projectId || /** @type {any} */ (e)?.name === 'AbortError') return 'aborted';
+    }
+  }
   const res = await fetch('/api/fulltext/fetch', { method: 'POST', signal, headers: { 'content-type': 'application/json' }, body: JSON.stringify({ doi: paper.doi || '', urls: candidateUrls(paper), license: paper.fulltext?.license || null, ...downloadFields() }) });
   if (signal.aborted || S.projectId !== projectId) return 'aborted';
   const body = await res.json().catch(() => ({}));
