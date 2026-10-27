@@ -84,11 +84,12 @@ export function findDoi(text) {
   return m ? m[0].replace(/[).,;\]]+$/, '') : null;
 }
 
-/** @param {any} app @param {{ fetchImpl?: any, mailto?: string, lookup?: any, extract?: any, scihubOrigins?: string[], pdfDir?: string }} [deps] */
+/** @param {any} app @param {{ fetchImpl?: any, mailto?: string, lookup?: any, extract?: any, scihubOrigins?: string[], pdfDir?: string, publicFetch?: boolean, maxFileBytes?: number }} [deps] */
 export function mountFulltext(app, deps = {}) {
   const doFetch = deps.fetchImpl ?? pinnedGet;
   const lookup = deps.lookup ?? ((/** @type {string} */ h) => dnsLookup(h, { all: true }));
   const extract = deps.extract ?? extractPdfText;
+  const maxFileBytes = Math.min(deps.maxFileBytes || LIMITS.fileBytes, LIMITS.fileBytes);
 
   /** @param {any} value */
   function safeProjectId(value) {
@@ -154,6 +155,14 @@ export function mountFulltext(app, deps = {}) {
     next();
   };
 
+  // 공개 사이트에는 공개본 가져오기만 허용한다. PC 파일 저장·업로드·Sci-Hub 경로는 로컬 전용이다.
+  const openFetchOrigin = (/** @type {any} */ req, /** @type {any} */ res, /** @type {any} */ next) => {
+    if (!deps.publicFetch) return sameOrigin(req, res, next);
+    const origin = req.get('origin');
+    if (origin && origin !== 'https://www.ondot.my') return next(new HttpError(403, 'bad_origin', '허용된 사이트에서만 요청할 수 있어요.'));
+    next();
+  };
+
   /** @param {string} url */
   async function safeFetch(url, accept = 'application/pdf,*/*') {
     let current = url;
@@ -176,7 +185,7 @@ export function mountFulltext(app, deps = {}) {
         }
         if (!response.ok) { await response.body?.cancel?.().catch(() => {}); return { error: response.status === 403 || response.status === 401 ? 'access_denied' : 'failed' }; }
         const declared = Number(response.headers.get('content-length') || 0);
-        if (declared > LIMITS.fileBytes) { await response.body?.cancel?.().catch(() => {}); return { error: 'too_large' }; }
+        if (declared > maxFileBytes) { await response.body?.cancel?.().catch(() => {}); return { error: 'too_large' }; }
         /** @type {Uint8Array[]} */
         const chunks = [];
         let size = 0;
@@ -186,12 +195,12 @@ export function mountFulltext(app, deps = {}) {
             const { done, value } = await reader.read();
             if (done) break;
             size += value.length;
-            if (size > LIMITS.fileBytes) { await reader.cancel().catch(() => {}); return { error: 'too_large' }; }
+            if (size > maxFileBytes) { await reader.cancel().catch(() => {}); return { error: 'too_large' }; }
             chunks.push(value);
           }
         } else {
           const ab = new Uint8Array(await response.arrayBuffer());
-          if (ab.length > LIMITS.fileBytes) return { error: 'too_large' };
+          if (ab.length > maxFileBytes) return { error: 'too_large' };
           chunks.push(ab);
         }
         return { bytes: Buffer.concat(chunks), finalUrl: current };
@@ -216,7 +225,8 @@ export function mountFulltext(app, deps = {}) {
   /** @param {Buffer} bytes @param {any} extra */
   async function finish(bytes, extra) {
     const check = inspectPdf(bytes);
-    if (!check.ok) return { status: check.code };
+    // 암호화 사전이 있어도 열람 암호가 없는 PDF가 있다. 실제 암호 요구는 PDF 파서가 판별한다.
+    if (!check.ok && check.code !== 'encrypted') return { status: check.code };
     const out = await extract(bytes);
     return { ...out, sha256: createHash('sha256').update(bytes).digest('hex'), extractor: 'pdfjs-dist',
       ...(['extracted', 'scan_only'].includes(out.status) ? { pdfBase64: bytes.toString('base64'), pdfBytes: bytes.length } : {}), ...extra };
@@ -253,7 +263,7 @@ export function mountFulltext(app, deps = {}) {
     finally { scihubBusy = false; }
   });
 
-  app.post('/api/fulltext/fetch', sameOrigin, async (req, res, next) => {
+  app.post('/api/fulltext/fetch', openFetchOrigin, async (req, res, next) => {
     try {
       const body = req.body || {};
       const given = (Array.isArray(body.urls) ? body.urls : []).filter((/** @type {any} */ u) => typeof u === 'string').slice(0, 10);
@@ -268,7 +278,10 @@ export function mountFulltext(app, deps = {}) {
         const got = await safeFetch(url);
         if (!got.bytes) { last = got.error || 'failed'; continue; }
         const done = await withLocalFile(got.bytes, doi, await finish(got.bytes, { source: new URL(got.finalUrl).hostname, license: typeof body.license === 'string' ? body.license : null, tried }), downloadLabel(body));
-        if (done.status === 'extracted' || done.status === 'scan_only') { res.json(done); return; }
+        if (done.status === 'extracted' || done.status === 'scan_only') {
+          if (deps.publicFetch && Buffer.byteLength(JSON.stringify(done)) > 4 * 1024 * 1024) { last = 'too_large'; continue; }
+          res.json(done); return;
+        }
         last = done.status;
       }
       res.json({ status: last, pages: [], pageCount: 0, tried });

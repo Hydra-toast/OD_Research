@@ -11,7 +11,7 @@ import { PURPOSES } from '../research/handoff.js';
 const FT_LABEL = {
   invalid_doi: 'DOI가 없거나 형식이 맞지 않아요', challenge_required: '로봇 확인이 필요해 자동으로 받지 못했어요', not_found: '해당 원문을 찾지 못했어요', doi_mismatch: '페이지의 DOI가 달라 받지 않았어요', busy: '다른 Sci-Hub 다운로드가 진행 중이에요',
   extracted: '원문 텍스트 추출됨', scan_only: '스캔본 같아요(텍스트 없음)', encrypted: '암호가 걸린 PDF', damaged: 'PDF가 손상됐어요', not_pdf: 'PDF가 아니었어요(로그인·안내 페이지 등)',
-  no_candidate: '공개 원문 주소를 찾지 못했어요', not_https: '안전하지 않은 주소라 받지 않았어요', blocked_host: '내부 주소라 받지 않았어요', too_large: '파일이 너무 커요(20MB 초과)',
+    no_candidate: '공개 원문 주소를 찾지 못했어요', not_https: '안전하지 않은 주소라 받지 않았어요', blocked_host: '내부 주소라 받지 않았어요', too_large: '파일이 크기 제한을 넘었어요',
   access_denied: '접근이 막혀 있어요', timeout: '시간이 초과됐어요', failed: '받지 못했어요', dns_failed: '주소를 찾지 못했어요', too_many_redirects: '이동이 너무 많아요',
   quota: '브라우저 저장 공간 부족',
 };

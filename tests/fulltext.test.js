@@ -35,6 +35,29 @@ async function start(fetchImpl, extra = {}) {
 const post = (base, body) => fetch(base + '/api/fulltext/fetch', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }).then(r => r.json());
 
 describe('fulltext', () => {
+  it('암호화 표시만으로 접근 가능한 PDF를 거절하지 않는다', async () => {
+    const readable = Buffer.concat([PDF, Buffer.from('\n% /Encrypt\n')]);
+    const { server, base } = await start(async () => reply(readable));
+    try { expect((await post(base, { urls: ['https://example.org/a.pdf'] })).status).toBe('extracted'); }
+    finally { server.close(); }
+  });
+  it('공개 사이트는 공개 PDF 경로만 허용하고 출처·파일 크기·내부 주소를 확인한다', async () => {
+    const { server, base } = await start(async () => reply(PDF), { publicFetch: true, maxFileBytes: 1024 });
+    try {
+      const headers = { 'content-type': 'application/json', origin: 'https://www.ondot.my' };
+      const ok = await fetch(base + '/api/fulltext/fetch', { method: 'POST', headers, body: JSON.stringify({ urls: ['https://example.org/a.pdf'] }) });
+      expect((await ok.json()).status).toBe('extracted');
+      const bad = await fetch(base + '/api/fulltext/fetch', { method: 'POST', headers: { ...headers, origin: 'https://evil.example' }, body: '{}' });
+      expect(bad.status).toBe(403);
+      const internal = await fetch(base + '/api/fulltext/fetch', { method: 'POST', headers, body: JSON.stringify({ urls: ['https://127.0.0.1/a.pdf'] }) });
+      expect((await internal.json()).status).toBe('blocked_host');
+      const upload = await fetch(base + '/api/fulltext/upload', { method: 'POST', headers, body: '{}' });
+      expect(upload.status).toBe(403);
+    } finally { server.close(); }
+    const limited = await start(async () => reply(PDF), { publicFetch: true, maxFileBytes: 5 });
+    try { expect((await post(limited.base, { urls: ['https://example.org/a.pdf'] })).status).toBe('too_large'); }
+    finally { limited.server.close(); }
+  });
   it('보조 함수', () => {
     expect(privateIp('10.1.2.3')).toBe(true);
     expect(privateIp('::1')).toBe(true);

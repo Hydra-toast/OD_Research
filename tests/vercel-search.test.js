@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, expect, it } from 'vitest';
 let server;
 let base;
-let configHandler, searchHandler, multiHandler, resolveHandler;
+let configHandler, searchHandler, multiHandler, resolveHandler, fulltextHandler;
 const previousSearchEnabled = process.env.SEARCH_ENABLED;
 beforeAll(async () => {
   process.env.SEARCH_ENABLED = 'true';
@@ -9,6 +9,7 @@ beforeAll(async () => {
   ({ default: searchHandler } = await import('../api/search.js'));
   ({ default: multiHandler } = await import('../api/research/search.js'));
   ({ default: resolveHandler } = await import('../api/papers/resolve.js'));
+  ({ default: fulltextHandler } = await import('../api/fulltext/fetch.js'));
   server = await new Promise(resolve => {
     const s = configHandler.listen(0, '127.0.0.1', () => resolve(s));
   });
@@ -24,6 +25,7 @@ it('검색 경로가 같은 서버 앱을 사용하고 설정과 입력 오류�
   expect(searchHandler).toBe(configHandler);
   expect(multiHandler).toBe(configHandler);
   expect(resolveHandler).toBe(configHandler);
+  expect(fulltextHandler).toBe(configHandler);
   const config = await (await fetch(`${base}/api/config`)).json();
   expect(config).toMatchObject({ search: true, auth: false });
   const bad = await fetch(`${base}/api/search`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ english: '' }) });
