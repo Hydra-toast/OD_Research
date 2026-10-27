@@ -18,3 +18,20 @@ renderSaved();
 loadRuntime();
 initAccount();
 initFromUrl();
+
+document.getElementById('parallel-toggle')?.addEventListener('click', e => {
+  const button = /** @type {HTMLButtonElement} */ (e.currentTarget);
+  const single = document.body.dataset.single !== 'true';
+  document.body.dataset.single = String(single);
+  button.setAttribute('aria-pressed', String(!single));
+  button.textContent = single ? '탭으로 보기' : '좌우 함께 보기';
+  render();
+});
+
+document.querySelector('.parallel-steps')?.addEventListener('click', e => {
+  const target = /** @type {HTMLElement} */ (e.target);
+  const link = target.closest('a');
+  if (!link || document.body.dataset.single !== 'true') return;
+  const pane = link.getAttribute('href') === '#panel-prepare' ? 'prepare' : 'explore';
+  document.getElementById('tab-' + pane)?.click();
+});

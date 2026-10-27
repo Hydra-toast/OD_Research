@@ -16,15 +16,28 @@ export function render() {
   const fk = /** @type {any} */ (document.activeElement)?.dataset?.fk;
   const recovery = S.status === 'corrupt' || S.status === 'missing';
   const tab = recovery ? 'explore' : S.tab;
+  const parallel = document.body.dataset.layout === 'parallel' && document.body.dataset.single !== 'true' && S.status === 'ok' && !recovery;
+  document.body.classList.toggle('has-workspace', !$('#workspace').hidden);
+  $('#ws-panels')?.classList.toggle('is-parallel', parallel);
   $('#sel-count').textContent = String(S.selPapers.length + S.selDirs.length);
   const ex = $('#tab-explore'), pr = $('#tab-prepare');
   ex.setAttribute('aria-selected', String(tab === 'explore')); ex.tabIndex = tab === 'explore' ? 0 : -1;
   pr.setAttribute('aria-selected', String(tab === 'prepare')); pr.tabIndex = tab === 'prepare' ? 0 : -1;
-  $('#panel-explore').hidden = tab !== 'explore';
-  $('#panel-prepare').hidden = tab !== 'prepare';
+  $('#panel-explore').hidden = !parallel && tab !== 'explore';
+  $('#panel-prepare').hidden = !parallel && tab !== 'prepare';
+  for (const name of ['explore', 'prepare']) {
+    const panel = $('#panel-' + name);
+    panel.setAttribute('role', parallel ? 'region' : 'tabpanel');
+  }
+  const tabs = document.querySelector('[role=tablist]');
+  if (tabs) /** @type {HTMLElement} */ (tabs).hidden = parallel;
   const lab = $('#lab-home');
   if (lab) lab.innerHTML = labSection(S);
-  if (tab === 'explore') $('#panel-explore').innerHTML = exploreHtml(S); else $('#panel-prepare').innerHTML = prepareHtml(S);
+  if (parallel || tab === 'explore') $('#panel-explore').innerHTML = exploreHtml(S);
+  if (parallel || tab === 'prepare') $('#panel-prepare').innerHTML = prepareHtml(S);
+  document.querySelectorAll('.parallel-steps a').forEach(link => {
+    /** @type {HTMLElement} */ (link).hidden = !document.querySelector(link.getAttribute('href') || '#panel-explore');
+  });
   renderEvidence();
   if (fk) focusFk(fk);
 }

@@ -10,7 +10,7 @@ export function isPublicPath(pathname) {
   let decoded = pathname;
   try { decoded = decodeURIComponent(pathname); } catch { return false; }
   if (decoded !== pathname || decoded.includes('..') || decoded.includes('\\')) return false;
-  if (pathname === '/' || pathname === '/index.html' || pathname === '/styles.css') return true;
+  if (pathname === '/' || pathname === '/index.html' || pathname === '/styles.css' || pathname === '/parallel.html' || pathname === '/parallel.css') return true;
   return /^\/src\/[A-Za-z0-9._/-]+\.js$/.test(pathname);
 }
 
