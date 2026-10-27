@@ -39,6 +39,17 @@ describe('Sci-Hub adapter and HTTP boundary', () => {
     expect(seen.map(String)).toEqual([`https://sci-hub.st/${DOI}`, `https://sci-hub.ru/${DOI}`, 'https://files.example/p.pdf']);
     expect(result.bytes.subarray(0, 5).toString()).toBe('%PDF-');
   });
+
+  it('앞선 주소가 실패하면 sci-hub.kr을 추가로 시도한다', async () => {
+    const seen = [];
+    const result = await fetchScihubPdf(DOI, async (url) => {
+      seen.push(url);
+      if (url.startsWith('https://sci-hub.kr/')) return { bytes: PDF, finalUrl: url };
+      return { error: 'failed' };
+    });
+    expect(seen).toEqual([`https://sci-hub.st/${DOI}`, `https://sci-hub.ru/${DOI}`, `https://sci-hub.kr/${DOI}`]);
+    expect(result.bytes).toEqual(PDF);
+  });
   it('다른 DOI와 로봇 확인 화면을 성공으로 표시하지 않는다', () => {
     expect(parseScihubPage('<meta name="citation_doi" content="10.9999/other"><embed src="/x.pdf">', 'https://fixture.example/', DOI).status).toBe('doi_mismatch');
     expect(parseScihubPage('<title>로봇 확인</title><altcha-widget>', 'https://fixture.example/', DOI).status).toBe('challenge_required');

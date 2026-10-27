@@ -1,5 +1,17 @@
 ﻿# 검증 매트릭스
 
+## 2026-10-28 Sci-Hub kr 후보
+
+checkJs, Sci-Hub·fulltext Vitest 22개 통과. 세 번째 후보 성공은 가상 응답. 실제 홈페이지 HTTP 200, DOI 한 건은 로봇 확인 화면으로 PDF 미확보. 공개 사이트 Sci-Hub API 404 및 배포 미실행.
+
+## 2026-10-28 PDF 직접 다운로드
+
+checkJs, 관련 Vitest 15개와 Chrome E2E 2개 통과. 가상 PDF 직접 다운로드, 신규 PDF 미보관, 기존 PDF 다운로드, 텍스트 보관 및 로컬 추가 저장 미요청 확인. 실제 다중 다운로드·공개 배포는 미검증.
+
+## 2026-10-28 PC별 PDF 다운로드 경로
+
+checkJs 및 관련 Vitest 15개 통과. Chrome E2E 1개에서 가상 PDF의 다운로드 이벤트·파일명·완료 확인. 실제 PC별 다운로드 폴더 설정과 공개 사이트 배포는 미검증.
+
 ## 2026-10-28 공개 사이트 원문 받기
 
 배포 사이트 fetch API 404 확인. checkJs, fulltext/Vercel Vitest 10개 통과. 배포용 핸들러를 로컬로 구동하여 실제 J-STAGE 공개 PDF 1편(1,689,895바이트, 10쪽, scan_only)을 받았다. 첫 실제 요청은 실패했고 재시도에 성공했다. 공개 배포와 Vercel 실제 런타임은 미검증이다.

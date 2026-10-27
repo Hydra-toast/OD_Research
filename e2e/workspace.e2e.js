@@ -43,6 +43,51 @@ test('검색 꺼짐을 가상 검색 성공으로 대체하지 않는다', async
   await expect(page.locator('#panel-explore')).toContainText('검색 서버에 연결되지 않았어요');
   await expect(page.locator('.pw-paper-row')).toHaveCount(0);
 });
+test('보관한 PDF를 현재 PC의 브라우저 다운로드로 저장한다', async ({ page }) => {
+  await searchFixture(page);
+  await page.evaluate(async () => {
+    const { S } = await import('/src/state/store.js');
+    const { saveFulltext } = await import('/src/repository/idb.js');
+    const { render } = await import('/src/controller/render.js');
+    const p = S.papers[0];
+    p.origin = 'provider';
+    S.fulltext[p.id] = { status: 'extracted', pageCount: 1, pdfAvailable: true };
+    await saveFulltext(S.projectId, p.id, [{ page: 1, text: '가상 예시 · 실제 논문 아님' }], new Blob(['%PDF-1.4\nfixture'], { type: 'application/pdf' }));
+    render();
+  });
+  await page.locator('.pw-paper-row').first().locator('[data-pact="open-detail"]').click();
+  const [file] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: '이전에 보관한 PDF 다운로드', exact: true }).click()]);
+  expect(file.suggestedFilename()).toMatch(/^paper-.*\.pdf$/);
+  expect(await file.failure()).toBeNull();
+});
+test('원문 받기에서 새 PDF는 직접 다운로드하고 브라우저 DB에는 저장하지 않는다', async ({ page }) => {
+  let requestBody;
+  await page.route('**/api/fulltext/fetch', r => {
+    requestBody = r.request().postDataJSON();
+    return r.fulfill({ json: { status: 'extracted', source: 'fixture', pageCount: 1, pages: [{ page: 1, text: '가상 예시 · 실제 논문 아님' }], pdfBase64: Buffer.from('%PDF-1.4\nfixture').toString('base64') } });
+  });
+  await searchFixture(page);
+  await page.evaluate(async () => {
+    const { S } = await import('/src/state/store.js');
+    const { render } = await import('/src/controller/render.js');
+    S.papers[0].origin = 'provider'; render();
+  });
+  await page.locator('.pw-paper-row').first().locator('[data-pact="open-detail"]').click();
+  const [file] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: '공개 원문 받기', exact: true }).click()]);
+  expect(await file.failure()).toBeNull();
+  expect(requestBody.saveLocal).toBe(false);
+  await expect.poll(() => page.evaluate(async () => {
+    const { S } = await import('/src/state/store.js');
+    return S.fulltext[S.papers[0].id]?.status;
+  })).toBe('extracted');
+  const stored = await page.evaluate(async () => {
+    const { S } = await import('/src/state/store.js');
+    const { loadFulltextPdf, loadFulltext } = await import('/src/repository/idb.js');
+    return { pdf: await loadFulltextPdf(S.projectId, S.papers[0].id), pages: await loadFulltext(S.projectId, S.papers[0].id) };
+  });
+  expect(stored.pdf).toBeNull();
+  expect(stored.pages).toHaveLength(1);
+});
 test('30편 검색, 선택·메모·비교·초점 보존과 저장본 재열기', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 1000 });
   const errors = []; page.on('pageerror', e => errors.push(e.message));

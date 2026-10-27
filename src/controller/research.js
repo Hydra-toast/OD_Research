@@ -2,7 +2,6 @@
 import { S, paperById, scopeText } from '../state/store.js';
 import { $, render, isWorkspaceLayout } from './render.js';
 import { scheduleSave } from './persist.js';
-import { pdfFolderName, safePdfFolder, savedPdfFolder } from '../research/pdf-folder.js';
 import { refineSearch } from './session.js';
 import { applyRefine, splitTerms, yearOrNull } from '../research/refine.js';
 import { autoSelectListed, listedItems, workspaceVisibleItems } from '../research/list.js';
@@ -65,15 +64,25 @@ export async function applyStoredPdf(/** @type {any} */ paper, /** @type {any} *
   touch();
 }
 
-async function storeResult(/** @type {any} */ paper, /** @type {any} */ r) {
+function downloadPdfBlob(/** @type {Blob} */ pdf, /** @type {any} */ paper) {
+  const url = URL.createObjectURL(pdf), a = document.createElement('a');
+  a.href = url; a.download = `paper-${String(paper?.doi || paper?.id || 'paper').replace(/[^A-Za-z0-9._-]/g, '_')}.pdf`;
+  document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 60000);
+}
+
+async function storeResult(/** @type {any} */ paper, /** @type {any} */ r, downloadPdf = false) {
   const old = S.fulltext[paper.id];
   if (!['extracted', 'scan_only'].includes(r.status) && ['extracted', 'scan_only'].includes(old?.status)) {
     S.fulltext[paper.id] = { ...old, lastError: r.status }; return;
   }
-  const pdf = r.pdfBase64 ? new Blob([Uint8Array.from(atob(r.pdfBase64), c => c.charCodeAt(0))], { type: 'application/pdf' }) : null;
-  const entry = { status: r.status, pageCount: r.pageCount || 0, source: r.source || '', license: r.license || null, sha256: r.sha256 || null, extractor: r.extractor || null, truncatedPages: !!r.truncatedPages, at: new Date().toISOString(), pdfAvailable: !!pdf, pdfBytes: r.pdfBytes || 0, sourceUrl: r.sourceUrl || null, requestedDoi: r.requestedDoi || null, doiVerified: r.doiVerified ?? null, localFile: typeof r.localFile === 'string' ? r.localFile : null };
+  if (downloadPdf && r.pdfBase64 && ['extracted', 'scan_only'].includes(r.status)) {
+    downloadPdfBlob(new Blob([Uint8Array.from(atob(r.pdfBase64), c => c.charCodeAt(0))], { type: 'application/pdf' }), paper);
+  }
+  // 예전에 보관한 PDF는 덮어쓰지 않으며 새 PDF는 브라우저 DB에 넣지 않는다.
+  const legacyPdf = S.projectId ? await loadFulltextPdf(S.projectId, paper.id) : null;
+  const entry = { status: r.status, pageCount: r.pageCount || 0, source: r.source || '', license: r.license || null, sha256: r.sha256 || null, extractor: r.extractor || null, truncatedPages: !!r.truncatedPages, at: new Date().toISOString(), pdfAvailable: !!legacyPdf, pdfBytes: r.pdfBytes || 0, sourceUrl: r.sourceUrl || null, requestedDoi: r.requestedDoi || null, doiVerified: r.doiVerified ?? null, localFile: typeof r.localFile === 'string' ? r.localFile : null };
   if ((r.status === 'extracted' || r.status === 'scan_only') && r.pages?.length && S.projectId) {
-    try { await saveFulltext(S.projectId, paper.id, r.pages, pdf); }
+    try { await saveFulltext(S.projectId, paper.id, r.pages, legacyPdf); }
     catch (e) {
       if (/** @type {any} */ (e)?.code === 'quota') { S.fulltext[paper.id] = { ...entry, status: 'quota', pdfAvailable: false, lastError: 'quota' }; return; }
       throw e;
@@ -83,20 +92,7 @@ async function storeResult(/** @type {any} */ paper, /** @type {any} */ r) {
 }
 
 function downloadFields() {
-  const folder = savedPdfFolder(S);
-  return folder ? { projectId: S.projectId, folder } : { projectId: S.projectId };
-}
-
-async function ensureDownloadFolder() {
-  if (!S.projectId) return;
-  const known = savedPdfFolder(S);
-  const folder = known || pdfFolderName(S.input || S.name || '');
-  try {
-    const res = await fetch('/api/fulltext/folder', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ projectId: S.projectId, folder, reuse: !!known }) });
-    const body = await res.json().catch(() => ({}));
-    const name = safePdfFolder(body.folderName);
-    if (res.ok && name && name !== S.pdfFolder) { S.pdfFolder = name; scheduleSave(); }
-  } catch { /* 폴더를 못 만들어도 받기는 이어 간다 */ }
+  return { projectId: S.projectId, saveLocal: false };
 }
 
 async function requestOpen(/** @type {any} */ paper, /** @type {AbortSignal} */ signal) {
@@ -104,7 +100,7 @@ async function requestOpen(/** @type {any} */ paper, /** @type {AbortSignal} */ 
   const res = await fetch('/api/fulltext/fetch', { method: 'POST', signal, headers: { 'content-type': 'application/json' }, body: JSON.stringify({ doi: paper.doi || '', urls: candidateUrls(paper), license: paper.fulltext?.license || null, ...downloadFields() }) });
   if (signal.aborted || S.projectId !== projectId) return 'aborted';
   const body = await res.json().catch(() => ({}));
-  await storeResult(paper, res.ok ? body : { status: 'failed' });
+  await storeResult(paper, res.ok ? body : { status: 'failed' }, true);
   return S.fulltext[paper.id]?.status || 'failed';
 }
 
@@ -114,7 +110,7 @@ async function requestScihub(/** @type {any} */ paper, /** @type {AbortSignal} *
   if (signal.aborted || S.projectId !== projectId) return 'aborted';
   const r = await res.json().catch(() => ({ status: 'failed' }));
   const status = r.status || 'failed';
-  await storeResult(paper, { ...r, status });
+  await storeResult(paper, { ...r, status }, true);
   return S.fulltext[paper.id]?.status || status;
 }
 
@@ -135,7 +131,6 @@ export async function bulkToggle() {
   if (S.fulltextBusy) { bulkCtrl?.abort(); return; }
   const papers = S.selPapers.map((/** @type {string} */ id) => paperById(id)).filter(Boolean);
   if (!papers.length) return;
-  await ensureDownloadFolder();
   const projectId = S.projectId;
   const ctrl = new AbortController();
   bulkCtrl = ctrl;
@@ -146,7 +141,7 @@ export async function bulkToggle() {
   try {
     const result = await runBulk({
       papers,
-      hasText: (/** @type {any} */ p) => ['extracted', 'scan_only'].includes(S.fulltext[p.id]?.status),
+      hasText: () => false,
       signal: ctrl.signal,
       fetchOpen: requestOpen,
       fetchScihub: (/** @type {any} */ p, /** @type {AbortSignal} */ signal) => p.doi ? requestScihub(p, signal) : Promise.resolve('invalid_doi'),
@@ -164,7 +159,7 @@ export async function bulkToggle() {
     S.fulltextProgress = { ...(S.fulltextProgress || {}), done: result.cancelled ? (S.fulltextProgress?.done || 0) : papers.length, total: papers.length, ok: n.ok, fail: n.fail };
     S.fulltextMsg = result.cancelled ? '받기를 취소했어요. 그때까지 받은 원문은 유지했어요.'
       : result.challenge ? `확보 ${n.ok}편. Sci-Hub 로봇 확인이 필요해 나머지는 멈추고 표시만 했어요.`
-      : `확보 ${n.ok}편 · 실패 ${n.fail}편.`;
+      : `원문 확인 ${n.ok}편 · 실패 ${n.fail}편. 다운로드 목록에서 저장 여부를 확인하세요.`;
   } catch {
     if (S.projectId === projectId) S.fulltextMsg = '받기를 마치지 못했어요. 이미 받은 원문은 유지했어요.';
   } finally {
@@ -179,14 +174,13 @@ async function fetchScihub(paper) {
   S.fulltextBusy = true; S.fulltextActive = [paper.id];
   S.fulltextMsg = 'Sci-Hub에서 선택한 논문 1편을 확인하고 있어요.'; render();
   try {
-    await ensureDownloadFolder();
     const res = await fetch('/api/fulltext/scihub', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ doi: paper.doi, ...downloadFields() }) });
     const r = await res.json();
     if (S.projectId !== projectId) return;
     const status = r.status || 'failed';
-    await storeResult(paper, { ...r, status });
-    S.fulltextMsg = status === 'extracted' ? `Sci-Hub 원문 ${r.pageCount}쪽과 PDF를 보관했어요.${r.doiVerified ? ' 본문 DOI 일치 확인.' : ' 본문 DOI는 직접 확인해 주세요.'}`
-      : status === 'scan_only' ? 'PDF는 보관했지만 추출할 텍스트가 없어요. OCR은 지원하지 않아요.'
+    await storeResult(paper, { ...r, status }, true);
+    S.fulltextMsg = status === 'extracted' ? `Sci-Hub 원문 ${r.pageCount}쪽을 추출하고 PDF 다운로드를 요청했어요. 다운로드 목록을 확인하세요.${r.doiVerified ? ' 본문 DOI 일치 확인.' : ' 본문 DOI는 직접 확인해 주세요.'}`
+      : status === 'scan_only' ? 'PDF 다운로드를 요청했지만 추출할 텍스트가 없어요. 다운로드 목록을 확인하세요. OCR은 지원하지 않아요.'
       : `Sci-Hub: ${ftLabel(status)}. 기존에 확보한 자료는 유지했어요.`;
   } catch {
     if (S.projectId === projectId) S.fulltextMsg = '다운로드 또는 브라우저 저장에 실패했어요. 기존 자료는 유지했어요.';
@@ -197,15 +191,12 @@ async function downloadStoredPdf(id) {
   try {
     const blob = await loadFulltextPdf(S.projectId, id);
     if (!blob) { S.fulltextMsg = '보관 PDF가 없어요. 원문을 다시 받아 주세요.'; render(); return; }
-    const url = URL.createObjectURL(blob), a = document.createElement('a');
-    a.href = url; a.download = `paper-${String(paperById(id)?.doi || id).replace(/[^A-Za-z0-9._-]/g, '_')}.pdf`;
-    document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 60000);
+    downloadPdfBlob(blob, paperById(id));
   } catch { S.fulltextMsg = '보관 PDF를 읽지 못했어요.'; render(); }
 }
 
 async function fetchMany(/** @type {any[]} */ papers) {
   if (!papers.length || S.fulltextBusy) return;
-  await ensureDownloadFolder();
   const ctrl = new AbortController();
   bulkCtrl = ctrl;
   S.fulltextBusy = true;
@@ -231,7 +222,7 @@ async function fetchMany(/** @type {any[]} */ papers) {
   };
   await Promise.all([worker(), worker()]);
   S.fulltextBusy = false; S.fulltextActive = [];
-  S.fulltextMsg = ctrl.signal.aborted ? '받기를 취소했어요. 그때까지 받은 원문은 유지했어요.' : `확보 ${counts.ok} / 공개본 없음 ${counts.none} / 실패·기타 ${counts.fail}.`;
+  S.fulltextMsg = ctrl.signal.aborted ? '받기를 취소했어요. 그때까지 받은 원문은 유지했어요.' : `원문 확인 ${counts.ok} / 공개본 없음 ${counts.none} / 실패·기타 ${counts.fail}. 다운로드 목록에서 저장 여부를 확인하세요.`;
   if (bulkCtrl === ctrl) bulkCtrl = null;
   touch();
 }

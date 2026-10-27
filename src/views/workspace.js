@@ -16,7 +16,6 @@ import {
 import { listedItems, matchedItems, workspaceVisibleItems, EXAMPLE_CAP, LIST_CAP } from '../research/list.js';
 import { applyRefine } from '../research/refine.js';
 import { suggestKeywords } from '../research/keywords.js';
-import { pdfFolderName, savedPdfFolder } from '../research/pdf-folder.js';
 import { SUMMARY_PROMPT_VERSION } from '../research/summary.js';
 
 const TASK_LABEL = {
@@ -392,7 +391,6 @@ export function workspaceClusterHtml(S) {
   const busy = !!S.fulltextBusy;
   const done = p?.done || 0;
   const total = p?.total || sel || 1;
-  const folder = savedPdfFolder(S) || pdfFolderName(S.input || S.name || '');
   const ver = S.summaries || [];
   const latest = ver.length ? ver[ver.length - 1] : null;
   const importDraft = S.pFormDrafts?.['summary-import:md'] ?? '';
@@ -422,11 +420,11 @@ export function workspaceClusterHtml(S) {
           : missingFt > 0
             ? `<p class="hint">원문 텍스트가 아직 없는 ${missingFt}편은 초록·서지정보 범위로 안내됩니다. 원문이 부족해도 프롬프트 복사와 정리 진행을 막지 않아요.</p>`
             : '<p class="hint">선택한 모든 논문의 원문 텍스트가 확보되어 있습니다.</p>'}
-        <p class="hint">상태 구분: <strong>PDF 보관</strong>(브라우저·폴더 저장) · <strong>첨부</strong>(Gemini에 직접 파일 추가) · <strong>독해</strong>(Gemini 수신 확인) · <strong>정확성 검증</strong>(사용자 원문 대조)은 별개입니다.</p>
+        <p class="hint">원문을 받으면 PDF 다운로드를 바로 요청합니다. 저장 위치는 이 PC의 브라우저 설정에 따릅니다. 여러 파일을 받을 때는 브라우저가 추가 다운로드 허용을 요청하거나 차단할 수 있으므로 다운로드 목록을 확인하세요.</p>
+        <p class="hint">새 PDF 파일은 브라우저에 보관하지 않습니다. 추출한 본문 텍스트는 조사에 저장되며, Gemini 첨부와 AI 독해·사용자 원문 확인은 별도입니다.</p>
         ${S.dataMode === 'real' ? `<div class="row">
           <button class="btn${busy ? '' : ' primary'}" type="button" data-ract="ft-bulk" data-fk="ft-bulk" ${sel || busy ? '' : 'disabled'}>${busy ? '받기 취소' : `${sel}편 원문 모두 받기`}</button>
           ${busy ? '<span class="spin" role="status" aria-label="받는 중"></span>' : ''}
-          <span class="meta">PDF 폴더 · data/inbox-pdfs/${h(folder)}</span>
         </div>
         ${busy ? `<progress value="${done}" max="${total}"></progress>` : ''}
         <p role="status" class="hint">${busy ? '받는 중 ' : ''}${p ? `${done}/${total} · 확보 ${extracted + scanOnly} · 실패 ${p.fail || 0}` : ''}${S.fulltextMsg ? ` ${h(S.fulltextMsg)}` : ''}</p>` : `<p class="hint">${exampleTag()} 가상 예시 자료(${S.papers.length}편 중 정리 대상 ${sel}편)는 초록 기준으로 동작하며 실제 원문 PDF를 다운로드하지 않아요.</p>`}

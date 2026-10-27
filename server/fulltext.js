@@ -256,7 +256,8 @@ export function mountFulltext(app, deps = {}) {
     try {
       const got = await fetchScihubPdf(doi, safeFetch, deps.scihubOrigins);
       if (!got.bytes) { res.json({ status: got.error, attempts: got.attempts }); return; }
-      const result = await withLocalFile(got.bytes, doi, await finish(got.bytes, { source: 'Sci-Hub', sourceUrl: got.finalUrl, requestedDoi: doi, license: null }), downloadLabel(req.body));
+      const finished = await finish(got.bytes, { source: 'Sci-Hub', sourceUrl: got.finalUrl, requestedDoi: doi, license: null });
+      const result = req.body?.saveLocal === false ? finished : await withLocalFile(got.bytes, doi, finished, downloadLabel(req.body));
       const text = (result.pages || []).map(p => p.text).join(' ').toLowerCase();
       res.json({ ...result, doiVerified: text.includes(doi.toLowerCase()), attempts: got.attempts });
     } catch (e) { next(e); }
@@ -277,7 +278,8 @@ export function mountFulltext(app, deps = {}) {
         tried++;
         const got = await safeFetch(url);
         if (!got.bytes) { last = got.error || 'failed'; continue; }
-        const done = await withLocalFile(got.bytes, doi, await finish(got.bytes, { source: new URL(got.finalUrl).hostname, license: typeof body.license === 'string' ? body.license : null, tried }), downloadLabel(body));
+        const finished = await finish(got.bytes, { source: new URL(got.finalUrl).hostname, license: typeof body.license === 'string' ? body.license : null, tried });
+        const done = body.saveLocal === false ? finished : await withLocalFile(got.bytes, doi, finished, downloadLabel(body));
         if (done.status === 'extracted' || done.status === 'scan_only') {
           if (deps.publicFetch && Buffer.byteLength(JSON.stringify(done)) > 4 * 1024 * 1024) { last = 'too_large'; continue; }
           res.json(done); return;

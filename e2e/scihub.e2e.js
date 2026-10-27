@@ -38,10 +38,10 @@ test(live ? '실제 Sci-Hub 1편: 원문 확보·PDF 저장·재열기·프롬�
   downloaded = await (await response).json();
   await panel.getByText('자세히').click();
   expect(downloaded.status, JSON.stringify({ status: downloaded.status, attempts: downloaded.attempts })).toBe('extracted');
-  await expect(panel.getByRole('button', { name: '보관 PDF 저장' })).toBeVisible();
+  await expect(panel.getByRole('button', { name: 'PDF 다운로드' })).toBeVisible();
   await expect(page.locator('#save-state')).toContainText('저장됨');
   const downloadEvent = page.waitForEvent('download');
-  await panel.getByRole('button', { name: '보관 PDF 저장' }).click();
+  await panel.getByRole('button', { name: 'PDF 다운로드' }).click();
   const download = await downloadEvent;
   expect(download.suggestedFilename()).toMatch(/\.pdf$/);
   const browserDownloadFailure = await download.failure();
@@ -64,7 +64,7 @@ test(live ? '실제 Sci-Hub 1편: 원문 확보·PDF 저장·재열기·프롬�
   await expect(page.locator('#workspace')).toBeHidden();
   await page.locator('#saved-list').getByRole('button', { name: '열기' }).click();
   await panel.getByText('자세히').click();
-  await expect(panel.getByRole('button', { name: '보관 PDF 저장' })).toBeVisible();
+  await expect(panel.getByRole('button', { name: 'PDF 다운로드' })).toBeVisible();
   const restoredPdf = await page.evaluate(async id => {
     const { S } = await import('/src/state/store.js');
     const { loadFulltextPdf } = await import('/src/repository/idb.js');
@@ -84,7 +84,7 @@ test(live ? '실제 Sci-Hub 1편: 원문 확보·PDF 저장·재열기·프롬�
     await panel.getByRole('button', { name: 'Sci-Hub 원문 받기', exact: true }).click();
     await expect(panel).toContainText('기존 자료 유지');
     await panel.getByText('자세히').click();
-    await expect(panel.getByRole('button', { name: '보관 PDF 저장' })).toBeVisible();
+    await expect(panel.getByRole('button', { name: 'PDF 다운로드' })).toBeVisible();
     expect(await page.evaluate(async () => {
       const { S } = await import('/src/state/store.js');
       return S.fulltext[S.papers[0].id].status;
