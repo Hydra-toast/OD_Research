@@ -14,7 +14,7 @@ async function startEuv(page) {
 test('랜딩: 문구를 적고 고칠 수 있다', async ({ page }) => {
   await page.goto('/');
   await expect(page.getByRole('heading', { level: 1 })).toHaveText('어떤 논문부터 읽을까요?');
-  await expect(page).toHaveTitle(/Research Landscape/);
+  await expect(page).toHaveTitle(/온닷/);
   await expect(page.getByRole('heading', { name: '기능 예시' })).toHaveCount(0);
   await page.locator('#brief').fill('ALD 공정으로 High-k 박막을 만드는 연구를 알아보고 싶어요.');
   await expect(page.locator('#brief')).toHaveValue(/ALD/);

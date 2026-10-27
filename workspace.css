@@ -598,8 +598,14 @@ body[data-layout="workspace"] .site-header nav a {
   margin-left: 0;
 }
 @media (max-width: 560px) {
+  body[data-layout="workspace"] .site-header {
+    height: auto;
+    min-height: 64px;
+  }
   body[data-layout="workspace"] .site-header .header-in {
     gap: 6px;
+    height: auto;
+    min-height: 64px;
   }
   body[data-layout="workspace"] .site-header .brand {
     font-size: 0.875rem;
@@ -609,5 +615,8 @@ body[data-layout="workspace"] .site-header nav a {
   }
   body[data-layout="workspace"] .site-header nav a {
     font-size: 0.8125rem;
+  }
+  body[data-layout="workspace"] .site-header nav button {
+    white-space: nowrap;
   }
 }

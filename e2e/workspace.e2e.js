@@ -2,6 +2,22 @@ import { readFileSync } from 'node:fs';
 import { test, expect } from '@playwright/test';
 import { knowledgeDocument, parseKnowledge, knowledgeKey } from '../src/research/knowledge.js';
 
+test('온닷 브랜드가 좁은 화면에서도 탐색 메뉴와 함께 표시된다', async ({ page }) => {
+  for (const width of [1280, 375]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto('/');
+    await expect(page).toHaveTitle(/온닷/);
+    await expect(page.getByRole('link', { name: '온닷 홈' })).toBeVisible();
+    await expect(page.locator('.brand-mark svg')).toBeVisible();
+    await expect(page.getByRole('link', { name: '저장한 조사' })).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    const boxes = await page.locator('.brand, .site-header nav').evaluateAll(els => els.map(el => { const r = el.getBoundingClientRect(); return { left: r.left, right: r.right, top: r.top, bottom: r.bottom }; }));
+    expect(boxes[0].right).toBeLessThanOrEqual(boxes[1].left);
+    expect(boxes[1].bottom).toBeLessThanOrEqual(await page.locator('.site-header').evaluate(el => el.getBoundingClientRect().bottom));
+    if (width === 375) await page.screenshot({ path: 'test-results/ondot-brand-mobile.png' });
+  }
+});
+
 test('지식 지도는 상세 결과에서 누적되고 다른 조사·새로고침·새 AI 프롬프트로 이어진다', async ({ page }) => {
   await searchFixture(page);
   await page.evaluate(async () => {
