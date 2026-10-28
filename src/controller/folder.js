@@ -1,6 +1,6 @@
 import { folderState as F } from './folder-state.js';
 import { S, paperById } from '../state/store.js';
-import { looseDoi } from '../research/inbox-match.js';
+import { matchFolderPdf } from '../research/folder-match.js';
 import { render } from './render.js';
 import { applyStoredPdf } from './research.js';
 
@@ -70,6 +70,8 @@ async function scan() {
         if (file.size > 20 * 1024 * 1024) { item.status = '20MB 초과 · 직접 확인'; continue; }
         const task = pdfjs.getDocument({ data: new Uint8Array(await file.arrayBuffer()), isEvalSupported: false });
         const doc = await task.promise;
+        const metadata = await doc.getMetadata().catch(() => null);
+        const metadataTitle = typeof metadata?.info?.Title === 'string' ? metadata.info.Title : '';
         item.pageCount = doc.numPages;
         for (let n = 1; n <= Math.min(doc.numPages, 100); n++) {
           const page = await doc.getPage(n), content = await page.getTextContent();
@@ -77,18 +79,16 @@ async function scan() {
           page.cleanup();
         }
         await task.destroy();
-        const first = item.pages.slice(0, 2).map((/** @type {any} */ p) => p.text).join(' ').toLowerCase();
         if (S.projectId !== projectId) break;
-        const found = new Set((first.match(/10\.\d{4,9}\/[^\s<>"\]]+/gi) || []).map(looseDoi));
-        const matches = S.papers.filter((/** @type {any} */ p) => p.doi && found.has(looseDoi(p.doi)));
-        if (matches.length === 1) {
-          item.paperId = matches[0].id;
-          item.status = 'DOI 일치 · 연결됨';
-          await applyStoredPdf(matches[0], { status: item.pages.some((/** @type {any} */ p) => p.text) ? 'extracted' : 'scan_only', pages: item.pages, pageCount: item.pageCount, truncatedPages: item.pageCount > 100, source: '선택한 폴더 PDF', extractor: 'pdfjs-dist' });
-        } else item.status = matches.length > 1 ? 'DOI가 여러 논문과 일치 · 직접 선택' : 'DOI 미확인 · 직접 선택';
+        const match = matchFolderPdf({ firstPage: item.pages[0]?.text || '', metadataTitle }, S.papers);
+        if (match.paper) {
+          await applyStoredPdf(match.paper, { status: item.pages.some((/** @type {any} */ p) => p.text) ? 'extracted' : 'scan_only', pages: item.pages, pageCount: item.pageCount, truncatedPages: item.pageCount > 100, source: match.basis === 'title' ? '선택한 폴더 PDF · 제목 일치' : '선택한 폴더 PDF · DOI 일치', extractor: 'pdfjs-dist' });
+          if (['extracted', 'scan_only'].includes(S.fulltext[match.paper.id]?.status)) { item.paperId = match.paper.id; item.status = match.reason; }
+          else item.status = '원문 저장 실패 · 직접 확인';
+        } else item.status = match.reason;
       } catch { item.status = 'PDF를 읽지 못함 · 직접 확인'; }
     }
-    F.message = `${F.items.length}개 PDF 확인. DOI가 하나의 논문과 일치하는 파일만 자동 연결했습니다.`;
+    F.message = `${F.items.length}개 PDF 확인. DOI를 우선 확인하고, DOI가 없으면 제목이 일치하는 파일을 연결했습니다.`;
   } catch { F.message = '폴더를 읽지 못했습니다. 권한을 확인하고 다시 선택하세요.'; }
   finally { F.busy = false; render(); }
 }

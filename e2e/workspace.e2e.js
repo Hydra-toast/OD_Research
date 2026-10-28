@@ -129,6 +129,29 @@ test('선택한 PC 폴더에 PDF를 저장하고 PDF 본문의 DOI로 연결한�
   await expect(page.getByText('DOI 일치 · 연결됨')).toBeVisible();
 });
 
+test('선택한 폴더에서 DOI 없는 PDF를 문서 제목으로 연결하고 원문 확보로 표시한다', async ({ page }) => {
+  const title = 'A hypothetical study of polymer fibers';
+  const pdf = fixturePdf(`${title} Authors and abstract`).toString('base64');
+  await page.addInitScript((data) => {
+    class Dir {
+      constructor() { this.kind = 'directory'; this.entries = new Map(); }
+      async getDirectoryHandle(name) { if (!this.entries.has(name)) this.entries.set(name, new Dir()); return this.entries.get(name); }
+      async *values() {
+        const bytes = Uint8Array.from(atob(data), c => c.charCodeAt(0));
+        yield { kind: 'file', name: '다른 파일 이름.pdf', async getFile() { return new File([bytes], '다른 파일 이름.pdf', { type: 'application/pdf' }); } };
+      }
+    }
+    window.showDirectoryPicker = async () => new Dir();
+  }, pdf);
+  await searchFixture(page);
+  await page.evaluate(async (value) => { const { S } = await import('/src/state/store.js'); S.papers[0].title = value; S.papers[0].doi = null; }, title);
+  await page.locator('#nav-settings').click();
+  await page.locator('[data-ract="folder-select"]').click();
+  await page.locator('[data-ract="folder-scan"]').click();
+  await expect(page.getByText('제목 일치 · 연결됨')).toBeVisible({ timeout: 20000 });
+  await expect.poll(() => page.evaluate(async () => { const { S } = await import('/src/state/store.js'); return S.fulltext[S.papers[0].id]?.status; })).toBe('extracted');
+});
+
 // 실제 논문·DOI가 없는 가상 자료. 실검색 저장 스키마의 사용자 자료 ID로 검사한다.
 const papers = Array.from({ length: 30 }, (_, i) => ({
   id: `user:example-workspace-${i}`, providerId: null, doi: null,
