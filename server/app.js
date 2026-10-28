@@ -17,7 +17,7 @@ const AUTH_MSG = {
   auth_not_configured: '계정 연결이 설정되지 않았어요. 예시 모드만 사용할 수 있어요.',
 };
 
-/** @param {{ auth: any, projects: any, search?: any, openai?: any, completeAi?: any, fulltext?: any, inbox?: any, openalexContent?: any, schedule?: boolean, config: { authEnabled: boolean, searchEnabled?: boolean }, root: string }} deps */
+/** @param {{ auth: any, projects: any, search?: any, openai?: any, geminiShortlist?: any, completeAi?: any, fulltext?: any, inbox?: any, openalexContent?: any, schedule?: boolean, config: { authEnabled: boolean, searchEnabled?: boolean }, root: string }} deps */
 export function createApp(deps) {
   const app = express();
   app.disable('x-powered-by');
@@ -48,6 +48,7 @@ export function createApp(deps) {
     res.json({
       auth: deps.config.authEnabled,
       search: !!deps.config.searchEnabled,
+      geminiShortlist: !!deps.geminiShortlist,
       searchProvider: 'OpenAlex',
       mode: deps.config.authEnabled ? 'account' : 'example',
       lab: '계정에 가져온 연구실 정보는 프로젝트 기록의 lab 필드에만 저장되며, 로그인한 소유자만 볼 수 있어요. 외부 AI 전송 동의와는 별개예요.',

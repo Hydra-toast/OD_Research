@@ -9,6 +9,19 @@ export function pdfFolderName(topic, date = new Date()) {
   return `${mm}${dd}-${slug || '조사'}`;
 }
 
+/** 사용자가 알아볼 수 있는 조사 주제와 날짜로 폴더 이름을 만든다. @param {any} topic @param {Date} [date] */
+export function readablePdfFolderName(topic, date = new Date()) {
+  const yyyy = date.getFullYear(), mm = String(date.getMonth() + 1).padStart(2, '0'), dd = String(date.getDate()).padStart(2, '0');
+  const name = String(topic || '').normalize('NFKC').replace(/[^\p{L}\p{N} _-]+/gu, ' ').replace(/\s+/g, ' ').trim().slice(0, 48).trim();
+  return `${yyyy}-${mm}-${dd} ${name || '새 조사'}`;
+}
+
+/** @param {any} value */
+export function safeLocalPdfFolder(value) {
+  const name = typeof value === 'string' ? value.trim() : '';
+  return name && name.length <= 80 && /^[\p{L}\p{N} _-]+$/u.test(name) ? name : '';
+}
+
 /** 경로로 쓸 수 있는 짧은 폴더 이름만 통과시킨다. @param {any} value */
 export function safePdfFolder(value) {
   const name = String(value || '').trim();

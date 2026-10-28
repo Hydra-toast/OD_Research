@@ -6,6 +6,7 @@ import { loadEnv, readConfig } from './env.js';
 import { createDisabledAuth, createSupabaseAuth } from './auth.js';
 import { createSupabaseProjects } from './projects.js';
 import { createLiveSearch } from '../src/providers/live.js';
+import { createGeminiShortlist } from './gemini-shortlist.js';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -18,6 +19,7 @@ export async function start(port) {
   const search = config.searchEnabled ? createLiveSearch({ apiKey: config.openalexKey, mailto: config.mailto }) : null;
   const app = createApp({
     auth, projects, search, root,
+    geminiShortlist: process.env.GEMINI_API_KEY?.trim() ? createGeminiShortlist({ apiKey: process.env.GEMINI_API_KEY.trim() }) : null,
     openalexContent: { apiKey: config.openalexKey },
     fulltext: { mailto: config.mailto },
     config: { authEnabled: config.authEnabled, searchEnabled: config.searchEnabled },

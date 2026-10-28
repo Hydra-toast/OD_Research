@@ -3,6 +3,8 @@ import { S, paperById } from '../state/store.js';
 import { matchFolderPdf } from '../research/folder-match.js';
 import { render } from './render.js';
 import { applyStoredPdf } from './research.js';
+import { readablePdfFolderName, safeLocalPdfFolder } from '../research/pdf-folder.js';
+import { scheduleSave } from './persist.js';
 
 /** @type {Promise<any>} */
 let writeQueue = Promise.resolve();
@@ -41,11 +43,28 @@ async function choose() {
     const projectId = S.projectId;
     const root = await /** @type {any} */ (window).showDirectoryPicker({ mode: 'readwrite', startIn: 'downloads' });
     if (S.projectId !== projectId) return;
-    const parent = await root.getDirectoryHandle('Research Landscape', { create: true });
-    // 날짜·주제 수정과 무관하게 같은 조사는 같은 폴더를 다시 찾는다.
-    const name = `조사-${projectId}`;
-    const dir = await parent.getDirectoryHandle(name, { create: true });
-    F.root = root; F.directory = dir; F.projectId = projectId; F.name = `Research Landscape/${name}`; F.items = [];
+    let name = safeLocalPdfFolder(S.localPdfFolder);
+    let dir;
+    // 예전 조사 폴더를 직접 선택하면 기존 PDF를 그대로 확인할 수 있다.
+    if (root.name === `조사-${projectId}`) { dir = root; name = root.name; }
+    else if (name) { dir = await root.getDirectoryHandle(name, { create: true }); }
+    else {
+      const base = readablePdfFolderName(S.input || S.name);
+      for (let i = 1; i <= 1000; i++) {
+        const candidate = `${base}${i > 1 ? `-${i}` : ''}`;
+        try { await root.getDirectoryHandle(candidate); }
+        catch (error) {
+          if (/** @type {any} */ (error)?.name !== 'NotFoundError') throw error;
+          name = candidate; dir = await root.getDirectoryHandle(name, { create: true }); break;
+        }
+      }
+      if (!dir) throw new Error('사용할 수 있는 폴더 이름이 없어요.');
+      if (S.projectId !== projectId) return;
+      S.localPdfFolder = name;
+      scheduleSave();
+    }
+    if (S.projectId !== projectId) return;
+    F.root = root; F.directory = dir; F.projectId = projectId; F.name = name; F.items = [];
     F.message = `선택한 폴더 아래 ${F.name}에 저장합니다.`;
   } catch (e) { F.message = /** @type {any} */ (e)?.name === 'AbortError' ? '폴더 선택을 취소했습니다.' : '폴더 접근에 실패했습니다. 권한을 확인하세요.'; }
   render();

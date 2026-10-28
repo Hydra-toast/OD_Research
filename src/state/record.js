@@ -6,7 +6,7 @@ import {
   validateDirection, validateSelection, validateAnalysisVersion, EMPTY_REASONS,
 } from '../schema.js';
 import { emptyRefine, normalizeRefine } from '../research/refine.js';
-import { safePdfFolder } from '../research/pdf-folder.js';
+import { safePdfFolder, safeLocalPdfFolder } from '../research/pdf-folder.js';
 import { validKnowledgeEntries } from '../research/knowledge.js';
 
 export const SCHEMA_VERSION = 2;
@@ -24,7 +24,7 @@ export function toRecord(S, scopeText) {
     papers: S.papers, userMeta: S.userMeta, exampleDataVersion: EXAMPLE_DATA_VERSION,
     queryPlan: S.queryPlan, collectedAt: S.collectedAt, estimatedTotal: S.estimatedTotal, searchPage: S.searchPage, searchWarnings: S.warnings,
     researchBrief: S.researchBrief ?? null,
-    refine: S.refine ?? emptyRefine(), summaries: S.summaries ?? [], fulltext: S.fulltext ?? {}, pdfFolder: safePdfFolder(S.pdfFolder), summaryCtx: S.summaryCtx ?? null,
+    refine: S.refine ?? emptyRefine(), summaries: S.summaries ?? [], fulltext: S.fulltext ?? {}, pdfFolder: safePdfFolder(S.pdfFolder), localPdfFolder: safeLocalPdfFolder(S.localPdfFolder), summaryCtx: S.summaryCtx ?? null,
     summaryRequest: typeof S.summaryRequest === 'string' ? S.summaryRequest : '',
     workspaceDraft: {
       forms: S.pFormDrafts ?? {}, summaryDraft: S.summaryDraft || '', summaryDraftIds: S.summaryDraftIds ?? [],
@@ -51,7 +51,7 @@ export function fromRecord(r) {
     queryPlan: r.queryPlan ?? null, collectedAt: r.collectedAt ?? null, estimatedTotal: r.estimatedTotal ?? null, searchPage: r.searchPage ?? 0,
     researchBrief: r.researchBrief ?? null,
     refine: normalizeRefine(r.refine),
-    summaries: Array.isArray(r.summaries) ? r.summaries : [], fulltext: isObj(r.fulltext) ? r.fulltext : {}, pdfFolder: safePdfFolder(r.pdfFolder), summaryCtx: isObj(r.summaryCtx) ? r.summaryCtx : null,
+    summaries: Array.isArray(r.summaries) ? r.summaries : [], fulltext: isObj(r.fulltext) ? r.fulltext : {}, pdfFolder: safePdfFolder(r.pdfFolder), localPdfFolder: safeLocalPdfFolder(r.localPdfFolder), summaryCtx: isObj(r.summaryCtx) ? r.summaryCtx : null,
     summaryRequest: typeof r.summaryRequest === 'string' ? r.summaryRequest : '',
     ...workspaceDraftState(r.workspaceDraft, validIds),
     knowledgeImports: Array.isArray(r.knowledgeImports) ? r.knowledgeImports : [],

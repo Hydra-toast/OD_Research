@@ -407,7 +407,7 @@ export function workspaceClusterHtml(S) {
     <section class="card stack" aria-labelledby="sm-h">
       <div class="pw-section-head">
         <h2 id="sm-h" style="font-size:1.25rem" tabindex="-1">1단계 · 읽을 논문 3~5편 추천</h2>
-        ${S.dataMode !== 'real' ? exampleTag() : tag('info', '수동 전달 · AI 자동 호출 없음')}
+        ${S.dataMode !== 'real' ? exampleTag() : ''}
       </div>
 
 
@@ -417,11 +417,11 @@ export function workspaceClusterHtml(S) {
         <textarea id="summary-focus" data-ract="summary-request" data-fk="summary-focus" rows="2" placeholder="비워 두어도 기본 연구군·입문 읽기 순서 지시를 만듭니다. 예: 공정 변수와 결함 관계를 다룬 방법 위주로 처음 읽을 2~3편과 이유">${h(S.summaryRequest || '')}</textarea>
       </div>
 
-      <p class="hint">1단계: 아래 버튼을 누르면 선택 논문의 제목·초록이 프롬프트에 포함됩니다. 사용하는 AI에 붙여 넣어 추천 논문 3~5편과 각 추천 이유를 확인하세요. 연구군은 2~3문장, 필요한 용어는 짧은 괄호 풀이로만 설명합니다. PDF 첨부나 추가 시작 명령은 필요 없습니다. 초록이 없는 논문은 자료 부족으로 남깁니다.</p>
+      <p class="hint">선택한 논문의 제목·초록과 조사 주제·정리 초점이 Gemini에 전송됩니다. PDF는 전송하지 않습니다. 무료 등급의 입력은 Google 제품 개선에 사용될 수 있습니다.</p>
 
       <div class="row">
-        <button class="btn primary" type="button" data-ract="summary-make" data-fk="summary-make" ${sel ? '' : 'disabled'}>${sel}편으로 정리 프롬프트 복사</button>
-        <span class="hint">제목·초록 선별 → 결과 가져오기 → 추천 논문 원문 확보</span>
+        <button class="btn primary" type="button" data-ract="gemini-shortlist" ${sel && !S.shortlistBusy ? '' : 'disabled'}>${S.shortlistBusy ? '추천 논문을 고르는 중…' : 'Gemini로 추천 논문 고르기'}</button>
+        <button class="btn" type="button" data-ract="summary-make" data-fk="summary-make" ${sel ? '' : 'disabled'}>${sel}편으로 정리 프롬프트 복사</button>
       </div>
 
       <details class="pw-subdetails" ${S.pPromptPreviewOpen || S.summaryPrompt ? 'open' : ''} data-pact-details="prompt-preview">
@@ -525,7 +525,7 @@ function workspaceLatestSummaryCard(S, latest, totalCount) {
     const picked = parseShortlist(latest.md, latest.paperIds, S.papers.map(p => p.id));
     return `<section class="card stack" aria-labelledby="sm-latest-h">
       <h2 id="sm-latest-h" style="font-size:1.125rem" tabindex="-1">1단계 추천 논문 ${picked.ids.length}편</h2>
-      <p class="hint">추천 이유는 AI 대화에서 확인하세요. 아래 논문을 바탕으로 원문 확보를 진행할 수 있습니다. 현재 선택은 왼쪽 목록에서 조정할 수 있습니다.</p>
+      <p class="hint">${latest.provider === 'gemini-api' ? '추천 이유는 원래 결과를 저장해 확인할 수 있습니다.' : '추천 이유는 AI 대화에서 확인하세요.'} 아래 논문을 바탕으로 원문 확보를 진행할 수 있습니다. 현재 선택은 왼쪽 목록에서 조정할 수 있습니다.</p>
       <div class="row">${picked.ids.map(id => `<button type="button" class="btn small" data-pact="open-detail" data-id="${h(id)}">[P${latest.paperIds.indexOf(id) + 1}] ${h(paperById(id, S)?.title || id)}</button>`).join('')}</div>
       <div class="row"><button type="button" class="btn small" data-ract="summary-dl" data-id="${h(latest.id)}">원래 결과 .md 저장</button><button type="button" class="btn small" data-pact="open-settings-tab" data-tab="versions">저장한 정리 기록 (${totalCount}개)</button></div>
     </section>`;
@@ -781,7 +781,7 @@ export function workspaceSettingsHtml(S) {
   let body = '';
   if (tab === 'inbox') {
     body = `<div class="stack">
-      <section class="card stack"><h3>PDF 저장 폴더</h3><p class="hint">이 PC에서 다운로드 폴더를 선택하면 그 안에 현재 조사용 폴더를 만듭니다. Chrome 또는 Edge에서 폴더 접근을 허용해 주세요. 다시 접속하면 선택을 다시 해야 합니다.</p><div class="row"><button class="btn" type="button" data-ract="folder-select">저장 폴더 선택</button><button class="btn" type="button" data-ract="folder-scan" ${folderState.busy ? 'disabled' : ''}>${folderState.busy ? '확인 중…' : '선택한 폴더의 PDF 확인'}</button></div><p class="hint" role="status" id="folder-status">${h(folderState.projectId && folderState.projectId !== S.projectId ? '현재 조사에 사용할 폴더를 선택해 주세요.' : folderState.message)}</p>${(folderState.projectId === S.projectId ? folderState.items : []).map((/** @type {any} */ item, /** @type {number} */ i) => `<div class="card stack"><strong>${h(item.name)}</strong><span>${h(item.status)}</span>${!item.paperId && item.pages.length ? `<label>연결할 논문<select data-folder-pick="${i}"><option value="">논문 선택</option>${(S.papers || []).map((/** @type {any} */ p) => `<option value="${h(p.id)}">${h(p.title)}</option>`).join('')}</select></label><button class="btn small" type="button" data-ract="folder-link" data-index="${i}">이 논문에 연결</button>` : ''}</div>`).join('')}</section>
+      <section class="card stack"><h3>PDF 저장 폴더</h3><p class="hint">선택한 폴더 안에 날짜와 조사 주제로 된 폴더를 만듭니다. 기존 조사 폴더는 직접 선택해 확인할 수 있습니다. Chrome 또는 Edge에서 폴더 접근을 허용해 주세요. 다시 접속하면 선택을 다시 해야 합니다.</p><div class="row"><button class="btn" type="button" data-ract="folder-select">저장 폴더 선택</button><button class="btn" type="button" data-ract="folder-scan" ${folderState.busy ? 'disabled' : ''}>${folderState.busy ? '확인 중…' : '선택한 폴더의 PDF 확인'}</button></div><p class="hint" role="status" id="folder-status">${h(folderState.projectId && folderState.projectId !== S.projectId ? '현재 조사에 사용할 폴더를 선택해 주세요.' : folderState.message)}</p>${(folderState.projectId === S.projectId ? folderState.items : []).map((/** @type {any} */ item, /** @type {number} */ i) => `<div class="card stack"><strong>${h(item.name)}</strong><span>${h(item.status)}</span>${!item.paperId && item.pages.length ? `<label>연결할 논문<select data-folder-pick="${i}"><option value="">논문 선택</option>${(S.papers || []).map((/** @type {any} */ p) => `<option value="${h(p.id)}">${h(p.title)}</option>`).join('')}</select></label><button class="btn small" type="button" data-ract="folder-link" data-index="${i}">이 논문에 연결</button>` : ''}</div>`).join('')}</section>
       <section class="card stack">
         <h3>도서관 프록시 설정</h3>
         <label>도서관 주소 앞부분<input type="text" data-ract="proxy-set" value="${h(proxyPrefix())}" placeholder="https://"></label>

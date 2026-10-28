@@ -103,7 +103,7 @@ test('선택한 PC 폴더에 PDF를 저장하고 PDF 본문의 DOI로 연결한�
   await page.addInitScript(() => {
     class Dir {
       constructor(name) { this.name = name; this.kind = 'directory'; this.entries = new Map(); }
-      async getDirectoryHandle(name, options) { if (!this.entries.has(name) && options?.create) this.entries.set(name, new Dir(name)); return this.entries.get(name); }
+      async getDirectoryHandle(name, options) { if (!this.entries.has(name) && !options?.create) throw new DOMException('missing', 'NotFoundError'); if (!this.entries.has(name)) this.entries.set(name, new Dir(name)); return this.entries.get(name); }
       async getFileHandle(name, options) {
         if (!this.entries.has(name) && !options?.create) throw new DOMException('missing', 'NotFoundError');
         if (!this.entries.has(name)) { const entry = { name, kind: 'file', blob: new Blob([]), async getFile() { return new File([this.blob], name, { type: 'application/pdf' }); }, async createWritable() { return { write: async b => { entry.blob = b; }, close: async () => {}, abort: async () => {} }; } }; this.entries.set(name, entry); }
@@ -111,14 +111,20 @@ test('선택한 PC 폴더에 PDF를 저장하고 PDF 본문의 DOI로 연결한�
       }
       async *values() { yield* this.entries.values(); }
     }
-    window.showDirectoryPicker = async () => new Dir('Downloads');
+    const root = new Dir('Downloads');
+    const d = new Date();
+    const date = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    root.entries.set(`${date} polymer materials`, new Dir(`${date} polymer materials`));
+    window.showDirectoryPicker = async () => root;
   });
   await page.route('**/api/fulltext/fetch', r => r.fulfill({ json: { status: 'extracted', source: 'fixture', pageCount: 1, pages: [{ page: 1, text: 'Example article DOI 10.1234/fixture.123 for testing.' }], pdfBase64: pdf.toString('base64') } }));
   await searchFixture(page);
   await page.evaluate(async () => { const { S } = await import('/src/state/store.js'); S.papers[0].origin = 'provider'; S.papers[0].doi = '10.1234/fixture.123'; });
   await page.locator('#nav-settings').click();
   await page.locator('[data-ract="folder-select"]').click();
-  await expect(page.locator('#folder-status')).toContainText('Research Landscape/');
+  await expect(page.locator('#folder-status')).toContainText('polymer materials');
+  await expect(page.locator('#folder-status')).not.toContainText('Research Landscape/');
+  await expect(page.locator('#folder-status')).toContainText('polymer materials-2');
   await page.locator('#nav-workspace-main').click();
   await startSingleBulk(page);
   await expect.poll(() => page.evaluate(async () => { const { folderState: f } = await import('/src/controller/folder-state.js'); let n = 0; for await (const _ of f.directory.values()) n++; return n; })).toBe(1);
@@ -126,6 +132,10 @@ test('선택한 PC 폴더에 PDF를 저장하고 PDF 본문의 DOI로 연결한�
   await page.locator('#nav-settings').click();
   await page.locator('[data-ract="folder-scan"]').click();
   await expect(page.locator('#folder-status')).toContainText('1개 PDF 확인', { timeout: 20000 });
+  await expect(page.getByText('DOI 일치 · 연결됨')).toBeVisible();
+  await page.locator('[data-ract="folder-select"]').click();
+  await expect(page.locator('#folder-status')).toContainText('polymer materials-2');
+  await page.locator('[data-ract="folder-scan"]').click();
   await expect(page.getByText('DOI 일치 · 연결됨')).toBeVisible();
 });
 
@@ -135,7 +145,7 @@ test('선택한 폴더에서 DOI 없는 PDF를 문서 제목으로 연결하고 
   await page.addInitScript((data) => {
     class Dir {
       constructor() { this.kind = 'directory'; this.entries = new Map(); }
-      async getDirectoryHandle(name) { if (!this.entries.has(name)) this.entries.set(name, new Dir()); return this.entries.get(name); }
+      async getDirectoryHandle(name, options) { if (!this.entries.has(name) && !options?.create) throw new DOMException('missing', 'NotFoundError'); if (!this.entries.has(name)) this.entries.set(name, new Dir()); return this.entries.get(name); }
       async *values() {
         const bytes = Uint8Array.from(atob(data), c => c.charCodeAt(0));
         yield { kind: 'file', name: '다른 파일 이름.pdf', async getFile() { return new File([bytes], '다른 파일 이름.pdf', { type: 'application/pdf' }); } };
@@ -169,6 +179,31 @@ async function searchFixture(page) {
   await page.getByRole('button', { name: '찾기', exact: true }).click();
   await expect(page.locator('.pw-paper-row')).toHaveCount(30);
 }
+
+test('Gemini가 고른 논문만 선택하고 상세 정리는 외부 프롬프트로 유지한다', async ({ page }) => {
+  let sent;
+  await page.route('**/api/research/gemini-shortlist', r => {
+    sent = r.request().postDataJSON();
+    return r.fulfill({ json: { overview: '가상 연구군 설명', recommendations: [{ number: 2, reason: '가상 추천 이유' }, { number: 1, reason: '가상 추천 이유' }] } });
+  });
+  await searchFixture(page);
+  await page.evaluate(async () => { const { S } = await import('/src/state/store.js'); const { render } = await import('/src/controller/render.js'); S.selPapers = S.papers.slice(0, 3).map(p => p.id); S.pTask = 'cluster'; render(); });
+  await page.locator('[data-ract="gemini-shortlist"]').click();
+  await expect.poll(() => page.evaluate(async () => (await import('/src/state/store.js')).S.selPapers)).toEqual([papers[1].id, papers[0].id]);
+  expect(sent.papers).toHaveLength(3);
+  expect(Object.keys(sent.papers[0]).sort()).toEqual(['abstract', 'title']);
+  await expect(page.locator('#bulk-h')).toBeVisible();
+  await expect(page.locator('[data-fk="summary-detail-make"]')).toBeVisible();
+});
+
+test('Gemini 오류 시 기존 선택을 유지한다', async ({ page }) => {
+  await page.route('**/api/research/gemini-shortlist', r => r.fulfill({ status: 429, json: { error: { message: 'Gemini 사용 한도에 도달했어요.' } } }));
+  await searchFixture(page);
+  await page.evaluate(async () => { const { S } = await import('/src/state/store.js'); const { render } = await import('/src/controller/render.js'); S.selPapers = S.papers.slice(0, 2).map(p => p.id); S.pTask = 'cluster'; render(); });
+  await page.locator('[data-ract="gemini-shortlist"]').click();
+  await expect(page.locator('.pw-summary-status')).toContainText('사용 한도');
+  expect(await page.evaluate(async () => (await import('/src/state/store.js')).S.selPapers)).toEqual([papers[0].id, papers[1].id]);
+});
 
 async function startSingleBulk(page) {
   await page.evaluate(async () => {

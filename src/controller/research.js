@@ -320,6 +320,42 @@ function addVersion(/** @type {string} */ md, /** @type {string[]} */ ids, /** @
   S.summaryDraftPromptVersion = SUMMARY_PROMPT_VERSION;
 }
 
+async function runGeminiShortlist() {
+  if (S.shortlistBusy) return;
+  const projectId = S.projectId;
+  const ids = [...S.selPapers];
+  const papers = ids.map(id => paperById(id));
+  if (!ids.length || ids.length > 30 || papers.some(p => !p)) { S.summaryMsg = '추천할 논문을 1~30편 선택해 주세요.'; render(); return; }
+  const input = { topic: S.input || '', focus: S.summaryRequest || '', papers: papers.map(p => ({ title: p.title || '', abstract: p.abstract || '' })) };
+  const snapshot = JSON.stringify(input);
+  S.shortlistBusy = true; S.summaryMsg = 'Gemini가 제목과 초록으로 논문을 고르고 있어요.'; render();
+  try {
+    const response = await fetch('/api/research/gemini-shortlist', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(input) });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.error?.message || 'Gemini 추천에 실패했어요.');
+    if (S.projectId !== projectId || JSON.stringify(S.selPapers) !== JSON.stringify(ids) || JSON.stringify({ topic: S.input || '', focus: S.summaryRequest || '', papers: ids.map(id => { const p = paperById(id); return { title: p?.title || '', abstract: p?.abstract || '' }; }) }) !== snapshot) throw new Error('추천을 기다리는 동안 조사 또는 선택한 논문이 바뀌었어요. 다시 추천해 주세요.');
+    if (!Array.isArray(data.recommendations) || !data.recommendations.length) throw new Error('제공된 초록에서 추천할 논문을 찾지 못했어요. 선택을 바꾸거나 직접 확인해 주세요.');
+    const safeLine = (/** @type {any} */ v) => String(v || '').replace(/\s+/g, ' ').replace(/\[P\d+\]/gi, '').trim();
+    const rows = data.recommendations.map((/** @type {any} */ row, /** @type {number} */ i) => `${i + 1}. [P${row.number}] ${safeLine(papers[row.number - 1]?.title)}\n추천 이유: ${safeLine(row.reason)}`);
+    const md = `${safeLine(data.overview)}\n\n${rows.join('\n\n')}\n\n초록 기준 잠정 추천이며 원문 확인이 필요합니다.\n\n선택 논문: ${data.recommendations.map((/** @type {any} */ row) => `[P${row.number}]`).join(', ')}`;
+    const picked = parseShortlist(md, ids, S.papers.map(p => p.id));
+    if (!picked.ok || picked.ids.length !== data.recommendations.length || data.recommendations.some((/** @type {any} */ row) => !Number.isInteger(row.number) || !papers[row.number - 1]?.abstract)) throw new Error('추천 결과를 확인하지 못했어요. 기존 선택은 유지됩니다.');
+    addVersion(md, ids, 'external');
+    const latest = S.summaries[S.summaries.length - 1];
+    latest.promptVersion = SHORTLIST_PROMPT_VERSION; latest.provider = 'gemini-api';
+    S.summaryDraftPromptVersion = SHORTLIST_PROMPT_VERSION;
+    S.summaryCtx = { paperIds: ids, promptVersion: SHORTLIST_PROMPT_VERSION, at: new Date().toISOString() };
+    S.selPapers = [...picked.ids]; S.pShowSelectedOnly = true; S.pListScrollTop = 0;
+    S.pView = 'main'; S.pTask = 'cluster'; S.pMobilePane = 'work'; S.pSummaryViewMode = 'read';
+    S.summaryMsg = `추천 논문 ${picked.ids.length}편을 선택했어요. 아래에서 원문을 확보하세요.`;
+    touch();
+    const { scrollWorkTo } = await import('./workspace.js');
+    scrollWorkTo('#bulk-h', '#bulk-h');
+  } catch (error) {
+    if (S.projectId === projectId) { S.summaryMsg = `${/** @type {Error} */ (error).message || 'Gemini 추천에 실패했어요.'} 기존 선택은 유지됩니다.`; render(); }
+  } finally { if (S.projectId === projectId) { S.shortlistBusy = false; render(); } }
+}
+
 function handoffContext(/** @type {string} */ purpose) {
   return {
     speech: S.input, field: '', conditions: '', criteria: S.researchBrief?.searchCriteria || {},
@@ -443,6 +479,7 @@ export function initResearch() {
       case 'ft-scihub': { const p = paperById(id); if (p) await fetchScihub(p); break; }
       case 'ft-download': await downloadStoredPdf(id); break;
       case 'ft-bulk': case 'ft-fetch-all': await bulkToggle(); break;
+      case 'gemini-shortlist': await runGeminiShortlist(); break;
       case 'summary-make': await buildPrompt(S.selPapers, '', isWorkspaceLayout() && t.dataset.summaryScope !== 'fulltext', t.dataset.summaryMode); break;
       case 'summary-prompt-dl': if (S.summaryPrompt) download('ai-instructions.md', S.summaryPrompt); break;
       case 'knowledge-download': { const entries = knowledgeEntries(S); if (entries.length) download('research-knowledge.md', knowledgeDocument(entries)); break; }

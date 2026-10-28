@@ -22,10 +22,10 @@ export const fresh = () => ({
   estimatedTotal: /** @type {number|null} */ (null), searchPage: 0, englishOverride: '', inputRevision: 0,
   searchError: '', forceExample: false, researchBrief: /** @type {any} */ (null), pendingReview: /** @type {any} */ (null),
   refine: emptyRefine(), refineMsg: '', refineBusy: false,
-  summaries: /** @type {any[]} */ ([]), knowledgeImports: /** @type {any[]} */ ([]), knowledgeMsg: '', knowledgeBackupMsg: '', knowledgeTransferFallback: '', pKnowledgeBackupOpen: false, pKnowledgeHandoffOpen: false, summaryDraft: '', summaryDraftIds: /** @type {string[]} */ ([]), summaryDraftPromptVersion: '', summaryCtx: /** @type {any} */ (null), summaryPrompt: '', summaryMode: 'attachments', summaryRequest: '', summaryMsg: '',
+  summaries: /** @type {any[]} */ ([]), knowledgeImports: /** @type {any[]} */ ([]), knowledgeMsg: '', knowledgeBackupMsg: '', knowledgeTransferFallback: '', pKnowledgeBackupOpen: false, pKnowledgeHandoffOpen: false, summaryDraft: '', summaryDraftIds: /** @type {string[]} */ ([]), summaryDraftPromptVersion: '', summaryCtx: /** @type {any} */ (null), summaryPrompt: '', summaryMode: 'attachments', summaryRequest: '', summaryMsg: '', shortlistBusy: false,
   chatgptPurpose: 'review', chatgptPrompt: '', chatgptMsg: '', chatgptPending: /** @type {any} */ (null), chatgptUndo: /** @type {any} */ (null), chatgptFocusId: '', chatgptNote: '', chatgptPack: /** @type {any} */ (null), chatgptPlan: /** @type {any} */ (null),
   aiDirections: /** @type {any[]} */ ([]), aiCompare: /** @type {any} */ (null), aiMemos: /** @type {any[]} */ ([]), reviewStaleAt: /** @type {string|null} */ (null),
-  fulltext: /** @type {Record<string,any>} */ ({}), pdfFolder: '', fulltextMsg: '', fulltextBusy: false, fulltextActive: /** @type {string[]} */ ([]), fulltextProgress: /** @type {any} */ (null), selectMsg: '', uploadTarget: /** @type {string|null} */ (null),
+  fulltext: /** @type {Record<string,any>} */ ({}), pdfFolder: '', localPdfFolder: '', fulltextMsg: '', fulltextBusy: false, fulltextActive: /** @type {string[]} */ ([]), fulltextProgress: /** @type {any} */ (null), selectMsg: '', uploadTarget: /** @type {string|null} */ (null),
   inbox: /** @type {any} */ (null),
   analysis: /** @type {any} */ (null), corrupt: /** @type {any} */ (null), readOnly: false, notFoundId: /** @type {string|null} */ (null),
   // 기본 작업 화면 전용 UI 상태 (저장본 스키마와 분리)
