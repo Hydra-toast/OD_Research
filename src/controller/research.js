@@ -4,7 +4,7 @@ import { $, render, isWorkspaceLayout } from './render.js';
 import { scheduleSave } from './persist.js';
 import { refineSearch } from './session.js';
 import { applyRefine, splitTerms, yearOrNull } from '../research/refine.js';
-import { autoSelectListed, listedItems, matchedItems, workspaceVisibleItems } from '../research/list.js';
+import { autoSelectListed, listedItems, workspaceVisibleItems } from '../research/list.js';
 import { runBulk } from '../research/bulk.js';
 import { ruleRank, RANK_VERSION } from '../research/rank.js';
 import { suggestKeywords } from '../research/keywords.js';
@@ -320,11 +320,10 @@ function addVersion(/** @type {string} */ md, /** @type {string[]} */ ids, /** @
   S.summaryDraftPromptVersion = SUMMARY_PROMPT_VERSION;
 }
 
-async function runGeminiShortlist(allCandidates = false) {
+async function runGeminiShortlist() {
   if (S.shortlistBusy) return;
   const projectId = S.projectId;
-  const selectedBefore = [...S.selPapers];
-  const ids = allCandidates ? matchedItems(S).slice(0, 100).map(it => it.paper.id) : selectedBefore;
+  const ids = [...S.selPapers];
   const papers = ids.map(id => paperById(id));
   if (ids.length < 3 || ids.length > 100 || papers.some(p => !p)) { S.summaryMsg = '검토할 논문을 3~100편 선택해 주세요.'; render(); return; }
   if (papers.filter(p => String(p?.abstract || '').trim()).length < 3) { S.summaryMsg = '추천하려면 초록이 있는 논문을 3편 이상 선택해 주세요.'; render(); return; }
@@ -337,8 +336,7 @@ async function runGeminiShortlist(allCandidates = false) {
     const response = await fetch('/api/research/gemini-shortlist', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(input) });
     const data = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(data.error?.message || 'Gemini 추천에 실패했어요.');
-    const currentIds = allCandidates ? matchedItems(S).slice(0, 100).map(it => it.paper.id) : S.selPapers;
-    if (S.projectId !== projectId || JSON.stringify(S.selPapers) !== JSON.stringify(selectedBefore) || JSON.stringify(currentIds) !== JSON.stringify(ids) || JSON.stringify({ topic: S.input || '', focus: S.summaryRequest || '', papers: ids.map(id => { const p = paperById(id); return { title: p?.title || '', abstract: p?.abstract || '' }; }) }) !== snapshot) throw new Error('추천을 기다리는 동안 조사 또는 선택한 논문이 바뀌었어요. 다시 추천해 주세요.');
+    if (S.projectId !== projectId || JSON.stringify(S.selPapers) !== JSON.stringify(ids) || JSON.stringify({ topic: S.input || '', focus: S.summaryRequest || '', papers: ids.map(id => { const p = paperById(id); return { title: p?.title || '', abstract: p?.abstract || '' }; }) }) !== snapshot) throw new Error('추천을 기다리는 동안 조사 또는 선택한 논문이 바뀌었어요. 다시 추천해 주세요.');
     if (!Array.isArray(data.recommendations) || data.recommendations.length < 3 || data.recommendations.length > 5) throw new Error('추천할 논문을 3편 이상 찾지 못했어요. 선택을 바꾸거나 직접 확인해 주세요.');
     const safeLine = (/** @type {any} */ v) => String(v || '').replace(/\s+/g, ' ').replace(/\[P\d+\]/gi, '').trim();
     const rows = data.recommendations.map((/** @type {any} */ row, /** @type {number} */ i) => `${i + 1}. [P${row.number}] ${safeLine(papers[row.number - 1]?.title)}\n추천 이유: ${safeLine(row.reason)}`);
@@ -489,7 +487,6 @@ export function initResearch() {
       case 'ft-download': await downloadStoredPdf(id); break;
       case 'ft-bulk': case 'ft-fetch-all': await bulkToggle(); break;
       case 'gemini-shortlist': await runGeminiShortlist(); break;
-      case 'gemini-shortlist-all': await runGeminiShortlist(true); break;
       case 'summary-make': await buildPrompt(S.selPapers, '', isWorkspaceLayout() && t.dataset.summaryScope !== 'fulltext', t.dataset.summaryMode); break;
       case 'summary-prompt-dl': if (S.summaryPrompt) download('ai-instructions.md', S.summaryPrompt); break;
       case 'knowledge-download': { const entries = knowledgeEntries(S); if (entries.length) download('research-knowledge.md', knowledgeDocument(entries)); break; }

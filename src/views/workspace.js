@@ -421,7 +421,6 @@ export function workspaceClusterHtml(S) {
 
       <div class="row">
         <button class="btn primary" type="button" data-ract="gemini-shortlist" ${sel && !S.shortlistBusy ? '' : 'disabled'}>${S.shortlistBusy ? '추천 논문을 고르는 중…' : 'Gemini로 추천 논문 고르기'}</button>
-        ${matchedItems(S).length > 30 ? `<button class="btn" type="button" data-ract="gemini-shortlist-all" ${S.shortlistBusy ? 'disabled' : ''}>검색된 논문 ${Math.min(matchedItems(S).length, 100)}편에서 추천</button>` : ''}
         <button class="btn" type="button" data-ract="summary-make" data-fk="summary-make" ${sel ? '' : 'disabled'}>${sel}편으로 정리 프롬프트 복사</button>
       </div>
       <p role="status" aria-live="polite" class="pw-summary-status">${h(S.summaryMsg || (sel ? '' : '왼쪽 논문 목록에서 추천할 논문을 선택해 주세요.'))}</p>

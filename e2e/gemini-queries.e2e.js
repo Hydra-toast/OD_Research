@@ -74,21 +74,20 @@ test('선택된 논문이 없으면 추천 버튼 옆에 선택 안내를 표시
   await expect(page.locator('.pw-summary-status')).toContainText('논문 목록에서 추천할 논문을 선택');
 });
 
-test('검색된 논문 40편에서 목록 밖 논문을 포함해 3편을 추천한다', async ({ page }) => {
+test('검색 결과가 30편을 넘어도 별도 추천 버튼 없이 선택한 논문에서 추천한다', async ({ page }) => {
   const papers = Array.from({ length: 40 }, (_, i) => ({ id: `user:example-wide-${i}`, title: `가상 예시 · 실제 논문 아님 ${i + 1}`, abstract: `가상 초록 ${i + 1}`, origin: 'user', authors: [], year: 2024, doi: null }));
   let sentCount = 0;
   await page.route('**/api/config', r => r.fulfill({ json: { search: true } }));
   await page.route('**/api/research/gemini-queries', r => r.fulfill({ json: { brief: plan } }));
   await page.route('**/api/research/search', r => r.fulfill({ json: { papers, collectedBefore: 40, collectedAfter: 40, warnings: [], failed: [] } }));
-  await page.route('**/api/research/gemini-shortlist', r => { sentCount = r.request().postDataJSON().papers.length; return r.fulfill({ json: { overview: '가상 설명', recommendations: [40, 1, 2].map(number => ({ number, reason: '가상 이유' })) } }); });
+  await page.route('**/api/research/gemini-shortlist', r => { sentCount = r.request().postDataJSON().papers.length; return r.fulfill({ json: { overview: '가상 설명', recommendations: [3, 1, 2].map(number => ({ number, reason: '가상 이유' })) } }); });
   await page.goto('/');
   await page.locator('#brief').fill('리그닌 전기방사');
   await page.getByRole('button', { name: 'AI 검색어 생성' }).click();
   await page.getByRole('button', { name: '선택한 검색 문구 실행' }).click();
   await expect(page.locator('.pw-paper-row')).toHaveCount(30);
-  const lastCandidate = await page.evaluate(async () => { const { S } = await import('/src/state/store.js'); const { matchedItems } = await import('/src/research/list.js'); return matchedItems(S)[39].paper.id; });
-  await page.getByRole('button', { name: '검색된 논문 40편에서 추천' }).click();
+  await expect(page.getByRole('button', { name: /검색된 논문.*편에서 추천/ })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Gemini로 추천 논문 고르기' }).click();
   await expect.poll(() => page.evaluate(async () => (await import('/src/state/store.js')).S.selPapers.length)).toBe(3);
-  expect(sentCount).toBe(40);
-  expect(await page.evaluate(async () => (await import('/src/state/store.js')).S.selPapers)).toContain(lastCandidate);
+  expect(sentCount).toBe(30);
 });
