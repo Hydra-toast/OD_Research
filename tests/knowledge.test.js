@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { knowledgeEntries, knowledgeDocument, parseKnowledge, mergeKnowledge, knowledgeKey } from '../src/research/knowledge.js';
+import { knowledgeEntries, knowledgeDocument, parseKnowledge, mergeKnowledge, knowledgeKey, CONVERSATION_HANDOFF_PROMPT } from '../src/research/knowledge.js';
 import { summaryPrompt } from '../src/research/summary.js';
 import { fresh } from '../src/state/store.js';
 import { toRecord, fromRecord, validateRecord } from '../src/state/record.js';
@@ -49,15 +49,23 @@ describe('모델 공통 지식 지도', () => {
     expect(prompt).not.toContain('Gemini');
     expect(prompt).toContain('후속 대화 활용 지침 (결과 본문에는 출력하지 않음)');
     expect(prompt).toContain('영구 기억');
-    expect(prompt).toContain('지식 지도(2건)');
+    expect(prompt).toContain('같은 AI 대화');
+    expect(prompt).toContain('별도 지식 지도 파일은 필수가 아닙니다');
+    expect(prompt).not.toContain('지식 지도 첨부 필요');
     expect(prompt).toContain('파일 누락 규칙은 이 지침보다 우선');
     expect(prompt).toContain('조사 질문 → 개념·용어 → 연구군·접근법');
   });
   it('1단계는 간결한 추천을 유지하며 지도 내용과 학습 보고서를 추가하지 않는다', () => {
     const prompt = summaryPrompt({ mode: 'abstracts', papers: [paper], knowledgeCount: 2 });
-    expect(prompt).toContain('지식 지도(2건)');
+    expect(prompt).toContain('같은 AI 대화');
     expect(prompt).toContain('추천 논문 3~5편');
     expect(prompt).not.toContain('후속 대화 활용 지침');
     expect(summaryPrompt({ papers: [paper] })).not.toContain('지식 지도 첨부 필요');
+  });
+  it('새 대화용 요청은 대화에서 확인한 내용과 원문 범위·논문 식별 정보를 요구한다', () => {
+    expect(CONVERSATION_HANDOFF_PROMPT).toContain('실제로 확인할 수 있는');
+    expect(CONVERSATION_HANDOFF_PROMPT).toContain('제목·DOI');
+    expect(CONVERSATION_HANDOFF_PROMPT).toContain('자료 범위');
+    expect(CONVERSATION_HANDOFF_PROMPT).toContain('자료를 요청');
   });
 });

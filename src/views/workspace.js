@@ -357,17 +357,17 @@ export function workspaceDetailHtml(S) {
       <p class="hint">${provider ? (p.relevance?.reasons?.length ? `규칙 정렬: ${p.relevance.reasons.slice(0, 3).map(h).join(' · ')} (검색어 일치 순서이며 AI 추천이 아닙니다.)` : '검색어 일치 순서이며 AI 추천이 아닙니다.') : `${h(ROLE_REASON[m.role])} ${reasons.map(h).join('; ')}`}</p>
     </section>
 
-    <section class="card stack" aria-labelledby="p-abs-h">
-      <h3 id="p-abs-h">초록 전문</h3>
-      <p class="hint">초록을 먼저 확인해 핵심 논문인지 판단한 뒤, 읽을 논문만 아래에서 원문을 받아 등록하세요.</p>
-      ${p.abstract ? `<blockquote>${h(p.abstract)}</blockquote>` : '<p class="notice">초록이 없어요(서지정보만 확보).</p>'}
-      <p class="hint">초록만 확보한 자료에서는 본문 절·그림·페이지 위치를 생성하지 않습니다.</p>
-    </section>
-
     <section class="card stack" aria-labelledby="p-ft-h">
       <h3 id="p-ft-h">개별 원문 작업</h3>
       <p class="hint">원문 사이트에서 직접 받은 PDF는 선택한 조사 폴더에 넣어 연결하거나 내 PDF 올리기로 등록할 수 있습니다.</p>
       ${provider ? fulltextLine(S, p) : `<p class="hint">${user ? '사용자가 직접 입력한 자료입니다(내용 확인 전).' : '가상 예시 문서예요. 실제 논문이 아니어서 원문 다운로드 대상이 아닙니다.'}</p>`}
+    </section>
+
+    <section class="card stack" aria-labelledby="p-abs-h">
+      <h3 id="p-abs-h">초록 전문</h3>
+      <p class="hint">초록을 확인해 읽을 논문인지 판단할 수 있습니다.</p>
+      ${p.abstract ? `<blockquote>${h(p.abstract)}</blockquote>` : '<p class="notice">초록이 없어요(서지정보만 확보).</p>'}
+      <p class="hint">초록만 확보한 자료에서는 본문 절·그림·페이지 위치를 생성하지 않습니다.</p>
     </section>
 
     <section class="card stack" aria-labelledby="p-note-h">
@@ -483,16 +483,32 @@ export function workspaceClusterHtml(S) {
       </div>
       <p class="hint">원문 확보 후에는 논문별 문제·방법·결과·의미와 논문 간 비교를 정리해, 다른 사람에게 설명할 수 있는 자료를 만듭니다.</p>
       <p class="hint">상세 정리 프롬프트를 복사한 뒤 선택한 논문의 PDF를 사용하는 AI에 첨부하세요.</p>
-      <p class="meta" data-knowledge-status>전문 도우미 지침 포함 · 누적 정리 ${knowledgeCount}건</p>
-      <p class="hint">정리본을 가져오면 이 조사에 지도가 쌓입니다. 다음 프롬프트에는 지도를 함께 전달하며, 새 조사에서는 저장한 지도를 불러올 수 있습니다. 새 AI 대화에도 지도 파일을 첨부하거나 내용을 붙여 넣으세요.</p>
-      <div class="row">
-        <button class="btn small" type="button" data-ract="knowledge-download" ${knowledgeCount ? '' : 'disabled'}>지식 지도 .md 저장</button>
-        <button class="btn small" type="button" data-ract="knowledge-copy" ${knowledgeCount ? '' : 'disabled'}>지도 내용 복사</button>
-        <button class="btn small" type="button" data-ract="knowledge-pick">이전 지도 불러오기</button>
-        <input type="file" data-ract="knowledge-import" aria-label="이전 지식 지도 파일" accept=".md,text/markdown,text/plain" hidden>
-        ${S.knowledgeImports?.length ? '<button class="btn small" type="button" data-ract="knowledge-clear">불러온 지도 연결 해제</button>' : ''}
-      </div>
       <button class="btn primary" type="button" data-ract="summary-make" data-summary-scope="fulltext" data-summary-mode="attachments" data-fk="summary-detail-make" ${sel ? '' : 'disabled'}>PDF 첨부용 상세 정리 프롬프트 복사</button>
+      <section class="pw-ai-context stack" aria-labelledby="ai-context-h">
+        <h3 id="ai-context-h">지식 지도 · AI와 연구 이어가기</h3>
+        <p>지식 지도는 여러 논문의 연구군과 관계를 이해하며 쌓아가는 연구 맥락입니다. 프롬프트와 PDF를 <strong>같은 AI 대화</strong>에 전달한 뒤, 그 대화에서 연구군·논문·후속 질문을 이어서 탐색하세요.</p>
+        <p class="hint">같은 대화에서도 AI가 이전 자료를 모두 볼 수 있는지는 서비스와 대화 길이에 따라 달라요. 확인할 수 없는 자료는 다시 전달해 주세요.</p>
+        <details class="pw-subdetails" data-pact-details="knowledge-handoff" ${S.pKnowledgeHandoffOpen ? 'open' : ''}>
+          <summary>새 AI 대화나 다른 모델에서 이어가려면</summary>
+          <p class="hint">기존 AI 대화에 아래 요청을 붙여 넣어 ‘연구 맥락 노트’를 만드세요. AI의 답변을 복사하거나 파일로 저장해 새 대화에 전달하고, 필요한 원문 PDF도 다시 첨부하세요.</p>
+          <button class="btn small" type="button" data-ract="knowledge-handoff">AI에 맥락 정리 요청 복사</button>
+          <p class="hint" role="status" data-knowledge-handoff-status>${h(S.knowledgeMsg || '')}</p>
+          ${S.knowledgeTransferFallback ? `<label>맥락 정리 요청 직접 복사<textarea rows="6" readonly>${h(S.knowledgeTransferFallback)}</textarea></label>` : ''}
+        </details>
+        <details class="pw-subdetails" data-pact-details="knowledge-backup" ${S.pKnowledgeBackupOpen ? 'open' : ''}>
+          <summary>온닷에 저장한 정리 활용하기</summary>
+          <p class="hint" data-knowledge-status>이 조사와 연결된 상세 정리 ${knowledgeCount}건 · 온닷에 저장된 결과만 포함됩니다.</p>
+          <p class="hint">웹페이지에 가져온 상세 정리를 파일로 내보내 AI 대화에 전달할 수 있어요. 다른 조사에서 만든 온닷 파일도 불러올 수 있습니다. 같은 AI 대화에서 이어갈 때는 파일이 필수가 아닙니다.</p>
+          <p class="hint" role="status">${h(S.knowledgeBackupMsg || '')}</p>
+          <div class="row">
+            <button class="btn small" type="button" data-ract="knowledge-download" ${knowledgeCount ? '' : 'disabled'}>저장된 정리 파일 받기</button>
+            <button class="btn small" type="button" data-ract="knowledge-copy" ${knowledgeCount ? '' : 'disabled'}>저장된 정리 복사</button>
+            <button class="btn small" type="button" data-ract="knowledge-pick">온닷 정리 파일 불러오기</button>
+            <input type="file" data-ract="knowledge-import" aria-label="이전 지식 지도 파일" accept=".md,text/markdown,text/plain" hidden>
+            ${S.knowledgeImports?.length ? '<button class="btn small" type="button" data-ract="knowledge-clear">불러온 정리 연결 해제</button>' : ''}
+          </div>
+        </details>
+      </section>
       <details class="pw-subdetails">
         <summary>PDF를 첨부할 수 없을 때</summary>
         <p class="hint">초록과 확보된 본문 발췌를 프롬프트에 포함합니다. 논문당 본문은 최대 12,000자이며 그림·표나 뒷부분이 빠질 수 있습니다.</p>

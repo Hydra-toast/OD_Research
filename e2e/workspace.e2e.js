@@ -18,7 +18,7 @@ test('온닷 브랜드가 좁은 화면에서도 탐색 메뉴와 함께 표시�
   }
 });
 
-test('지식 지도는 상세 결과에서 누적되고 다른 조사·새로고침·새 AI 프롬프트로 이어진다', async ({ page }) => {
+test('같은 AI 대화를 우선 안내하고 온닷에 저장한 정리는 선택적으로 옮긴다', async ({ page }) => {
   await searchFixture(page);
   await page.evaluate(async () => {
     const { S } = await import('/src/state/store.js');
@@ -29,7 +29,9 @@ test('지식 지도는 상세 결과에서 누적되고 다른 조사·새로고
   await expect.poll(() => page.evaluate(async () => (await import('/src/state/store.js')).S.summaryPrompt)).toContain('후속 대화 활용 지침');
   await page.locator('[data-fk="summary-import-md"]').fill('### 가상 예시 · 실제 논문 아님\n\n누적할 상세 설명 [P1]');
   await page.locator('[data-import-purpose="detail"]').click();
-  await expect(page.locator('[data-knowledge-status]')).toContainText('누적 정리 1건');
+  await expect(page.getByText('같은 AI 대화', { exact: true })).toBeVisible();
+  await page.getByText('온닷에 저장한 정리 활용하기', { exact: true }).click();
+  await expect(page.locator('[data-knowledge-status]')).toContainText('상세 정리 1건');
   const downloadEvent = page.waitForEvent('download');
   await page.locator('[data-ract="knowledge-download"]').click();
   const downloaded = await downloadEvent;
@@ -51,9 +53,9 @@ test('지식 지도는 상세 결과에서 누적되고 다른 조사·새로고
   });
   const file = { name: 'research-knowledge.md', mimeType: 'text/markdown', buffer: Buffer.from(knowledgeDocument(originalEntries)) };
   await page.locator('[data-ract="knowledge-import"]').setInputFiles(file);
-  await expect(page.locator('[data-knowledge-status]')).toContainText('누적 정리 1건');
+  await expect(page.locator('[data-knowledge-status]')).toContainText('상세 정리 1건');
   await page.locator('[data-ract="knowledge-import"]').setInputFiles(file);
-  await expect(page.locator('[data-knowledge-status]')).toContainText('누적 정리 1건');
+  await expect(page.locator('[data-knowledge-status]')).toContainText('상세 정리 1건');
   const nextProjectId = await page.evaluate(async () => {
     const { S } = await import('/src/state/store.js');
     const { flushSave } = await import('/src/controller/persist.js');
@@ -63,23 +65,27 @@ test('지식 지도는 상세 결과에서 누적되고 다른 조사·새로고
   await page.goto('/?project=' + nextProjectId);
   await page.locator('#nav-saved').click();
   await page.locator(`[data-act="open-saved"][data-id="${nextProjectId}"]`).click();
-  await expect(page.locator('[data-knowledge-status]')).toContainText('누적 정리 1건');
-  const autoDownload = page.waitForEvent('download');
+  await expect(page.locator('[data-knowledge-status]')).toContainText('상세 정리 1건');
+  const downloads = [];
+  page.on('download', download => downloads.push(download.suggestedFilename()));
   await page.locator('[data-fk="summary-detail-make"]').click();
-  const bundle = await autoDownload;
-  const entries = parseKnowledge(readFileSync(await bundle.path(), 'utf8'));
-  expect(knowledgeKey(entries[0])).toBe(originalKey);
-  await expect.poll(() => page.evaluate(async () => (await import('/src/state/store.js')).S.summaryPrompt)).toContain('지식 지도(1건)');
+  await expect.poll(() => page.evaluate(async () => (await import('/src/state/store.js')).S.summaryPrompt)).toContain('별도 지식 지도 파일은 필수가 아닙니다');
+  expect(downloads).toEqual([]);
+  expect(knowledgeKey(originalEntries[0])).toBe(originalKey);
   expect(await page.evaluate(async () => (await import('/src/state/store.js')).S.summaryPrompt)).not.toContain('누적할 상세 설명');
+  await page.getByText('새 AI 대화나 다른 모델에서 이어가려면', { exact: true }).click();
+  await page.locator('[data-ract="knowledge-handoff"]').click();
+  await expect(page.locator('[data-knowledge-handoff-status]')).not.toBeEmpty();
+  await page.getByText('온닷에 저장한 정리 활용하기', { exact: true }).click();
   await page.locator('[data-ract="knowledge-import"]').setInputFiles({ name: 'bad.md', mimeType: 'text/markdown', buffer: Buffer.from('# broken') });
-  await expect(page.locator('.pw-summary-status')).toContainText('이 사이트에서 저장한');
-  await expect(page.locator('[data-knowledge-status]')).toContainText('누적 정리 1건');
+  await expect(page.locator('[data-pact-details="knowledge-backup"] [role="status"]')).toContainText('이 사이트에서 저장한');
+  await expect(page.locator('[data-knowledge-status]')).toContainText('상세 정리 1건');
   await page.locator('[data-ract="knowledge-clear"]').click();
-  await expect(page.locator('[data-knowledge-status]')).toContainText('누적 정리 0건');
+  await expect(page.locator('[data-knowledge-status]')).toContainText('상세 정리 0건');
   await page.goto('/?project=' + projectId);
   await page.locator('#nav-saved').click();
   await page.locator(`[data-act="open-saved"][data-id="${projectId}"]`).click();
-  await expect(page.locator('[data-knowledge-status]')).toContainText('누적 정리 1건');
+  await expect(page.locator('[data-knowledge-status]')).toContainText('상세 정리 1건');
 });
 
 function fixturePdf(text) {
@@ -213,12 +219,12 @@ test('정리 기록에서 이전 결과의 종류를 구분하고 최신 결과�
   await expect(page.locator('[data-ract="summary-draft"]')).toContainText('가상 상세 정리');
   await page.locator('[data-ract="summary-draft"]').fill('# 수정된 상세 정리\n\n근거 [P1]');
   await page.locator('[data-ract="summary-save-draft"]').click();
-  await expect(page.locator('[data-knowledge-status]')).toContainText('누적 정리 2건');
+  await expect(page.locator('[data-knowledge-status]')).toContainText('상세 정리 2건');
   await page.locator('[data-fk="sm-open-versions"]').click();
   await page.locator('[data-ract="summary-load"]').nth(1).click();
   await expect(page.locator('[data-ract="summary-draft"]')).toContainText('선택 논문: [P1]');
   await page.locator('[data-ract="summary-save-draft"]').click();
-  await expect(page.locator('[data-knowledge-status]')).toContainText('누적 정리 2건');
+  await expect(page.locator('[data-knowledge-status]')).toContainText('상세 정리 2건');
 });
 
 test('초록 기반 정리와 결과 확인을 원문 받기보다 먼저 안내한다', async ({ page }) => {
@@ -285,6 +291,7 @@ test('개별 원문 작업은 해당 사이트를 새 탭으로 직접 연다', 
     S.papers[0].fulltext = { pdfUrl: 'https://example.org/article.pdf' };
   });
   await page.locator('.pw-paper-row').first().locator('[data-pact="open-detail"]').click();
+  expect(await page.locator('#p-ft-h').evaluate(el => !!(el.compareDocumentPosition(document.querySelector('#p-abs-h')) & Node.DOCUMENT_POSITION_FOLLOWING))).toBe(true);
   const pub = page.getByRole('link', { name: '공개 원문 사이트 열기' });
   const sci = page.getByRole('link', { name: 'Sci-Hub 사이트 열기' });
   await expect(pub).toHaveAttribute('href', 'https://example.org/article.pdf');

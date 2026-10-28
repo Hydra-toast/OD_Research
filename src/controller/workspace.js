@@ -126,6 +126,8 @@ export function initWorkspace() {
     if (!kind) return;
     if (kind === 'prompt-preview') S.pPromptPreviewOpen = t.open;
     if (kind === 'summary-import') S.pSummaryImportOpen = t.open;
+    if (kind === 'knowledge-backup') S.pKnowledgeBackupOpen = t.open;
+    if (kind === 'knowledge-handoff') S.pKnowledgeHandoffOpen = t.open;
   }, true);
 
   document.addEventListener('click', async (e) => {

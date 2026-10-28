@@ -13,7 +13,7 @@ import { buildHandoff, parseHandoff, pickPapers, basisVersion } from '../researc
 import { candidateUrls, ftLabel, openAlexPdfPath } from '../views/research.js';
 import { saveFulltext, loadFulltext, loadFulltextPdf } from '../repository/idb.js';
 import { savePdfToFolder } from './folder.js';
-import { knowledgeEntries, knowledgeDocument, parseKnowledge, mergeKnowledge, KNOWLEDGE_MAX_BYTES } from '../research/knowledge.js';
+import { knowledgeEntries, knowledgeDocument, parseKnowledge, mergeKnowledge, KNOWLEDGE_MAX_BYTES, CONVERSATION_HANDOFF_PROMPT } from '../research/knowledge.js';
 
 const touch = () => { scheduleSave(); render(); };
 
@@ -300,8 +300,7 @@ export async function buildPrompt(/** @type {string[]} */ ids, /** @type {string
   const keywords = suggestKeywords(S.papers, { known: [], limit: 10 }).map(k => k.term);
   S.summaryPrompt = summaryPrompt({ mode: abstractsOnly ? 'abstracts' : mode, topic: S.input, papers, fulltext: abstractsOnly ? {} : S.fulltext, pagesById, keywords, request: S.summaryRequest, previousMd, knowledgeCount: knowledge.length });
   S.summaryCtx = { paperIds: papers.map(p => p.id), promptVersion: abstractsOnly ? SHORTLIST_PROMPT_VERSION : SUMMARY_PROMPT_VERSION, at: new Date().toISOString() };
-  if (knowledge.length) download('research-knowledge.md', knowledgeDocument(knowledge));
-  try { await navigator.clipboard.writeText(S.summaryPrompt); S.summaryMsg = `프롬프트를 복사했어요(논문 ${papers.length}편). 사용하는 AI 대화에 붙여 넣으세요. ${abstractsOnly ? '제목·초록으로 선별합니다. PDF 첨부는 필요 없습니다.' : mode === 'text' ? '초록과 확보된 본문 발췌를 포함했어요.' : 'PDF를 직접 첨부한 뒤 ‘정리 시작’이라고 입력하세요.'}${knowledge.length ? ' 함께 다운로드 요청한 research-knowledge.md도 첨부하세요. 저장되지 않았다면 지식 지도 저장을 누르거나 내용 복사를 이용하세요.' : ''}${previousMd && mode !== 'text' ? ' 이전 정리본도 .md 저장 후 첨부하세요.' : ''} 이 사이트는 전송하지 않았어요.`; }
+  try { await navigator.clipboard.writeText(S.summaryPrompt); S.summaryMsg = `프롬프트를 복사했어요(논문 ${papers.length}편). 이어서 탐색할 때는 이전에 쓰던 AI 대화에 붙여 넣으세요. ${abstractsOnly ? '제목·초록으로 선별합니다. PDF 첨부는 필요 없습니다.' : mode === 'text' ? '초록과 확보된 본문 발췌를 포함했어요.' : '선택한 PDF를 직접 첨부한 뒤 ‘정리 시작’이라고 입력하세요.'}${previousMd && mode !== 'text' ? ' 이전 정리본도 .md 저장 후 첨부하세요.' : ''}`; }
   catch { S.pPromptPreviewOpen = true; S.summaryMsg = '자동 복사에 실패했어요. 아래 미리보기에서 직접 복사하세요.'; }
   touch();
 }
@@ -447,14 +446,18 @@ export function initResearch() {
       case 'summary-make': await buildPrompt(S.selPapers, '', isWorkspaceLayout() && t.dataset.summaryScope !== 'fulltext', t.dataset.summaryMode); break;
       case 'summary-prompt-dl': if (S.summaryPrompt) download('ai-instructions.md', S.summaryPrompt); break;
       case 'knowledge-download': { const entries = knowledgeEntries(S); if (entries.length) download('research-knowledge.md', knowledgeDocument(entries)); break; }
+      case 'knowledge-handoff':
+        try { await navigator.clipboard.writeText(CONVERSATION_HANDOFF_PROMPT); S.knowledgeMsg = '복사했어요. 지금까지 연구한 AI 대화에 붙여 넣으세요.'; S.knowledgeTransferFallback = ''; }
+        catch { S.knowledgeMsg = '자동 복사하지 못했어요. 아래 문구를 직접 복사하세요.'; S.knowledgeTransferFallback = CONVERSATION_HANDOFF_PROMPT; }
+        render(); break;
       case 'knowledge-pick': /** @type {HTMLInputElement|null} */ (document.querySelector('[data-ract="knowledge-import"]'))?.click(); break;
       case 'knowledge-copy': {
         const entries = knowledgeEntries(S); if (!entries.length) break;
-        try { await navigator.clipboard.writeText(knowledgeDocument(entries)); S.summaryMsg = '지식 지도를 복사했어요. 새 AI 대화에 붙여 넣고 질문을 이어가세요.'; }
-        catch { S.summaryMsg = '복사하지 못했어요. 지식 지도 .md 저장을 이용해 주세요.'; }
+        try { await navigator.clipboard.writeText(knowledgeDocument(entries)); S.knowledgeBackupMsg = '저장된 정리를 복사했어요. AI 대화에 붙여 넣으세요.'; }
+        catch { S.knowledgeBackupMsg = '복사하지 못했어요. 저장된 정리 파일 받기를 이용해 주세요.'; }
         render(); break;
       }
-      case 'knowledge-clear': S.knowledgeImports = []; S.summaryPrompt = ''; S.summaryMsg = '불러온 지도 연결을 해제했어요. 이 조사 정리본과 원래 파일은 유지됩니다.'; touch(); break;
+      case 'knowledge-clear': S.knowledgeImports = []; S.summaryPrompt = ''; S.knowledgeBackupMsg = '불러온 정리의 연결을 해제했어요. 이 조사 정리본과 원래 파일은 유지됩니다.'; touch(); break;
       case 'summary-copy': try { await navigator.clipboard.writeText(S.summaryPrompt); S.summaryMsg = '복사했어요.'; } catch { S.pPromptPreviewOpen = true; S.summaryMsg = '복사에 실패했어요. 미리보기에서 직접 복사하세요.'; } render(); break;
       case 'summary-load': {
         const v = S.summaries.find((/** @type {any} */ x) => x.id === id);
@@ -613,9 +616,9 @@ export function initResearch() {
         const merged = mergeKnowledge(S.knowledgeImports || [], entries);
         if (new TextEncoder().encode(knowledgeDocument(merged)).length > KNOWLEDGE_MAX_BYTES) throw new Error('불러올 지도 합계가 2MB를 넘어요. 다른 조사에서 나누어 활용해 주세요.');
         S.knowledgeImports = merged; S.summaryPrompt = '';
-        S.summaryMsg = '지식 지도를 연결했어요. 다음 프롬프트를 만들 때 함께 전달할 수 있습니다.';
+        S.knowledgeBackupMsg = '정리 파일을 연결했어요. AI에 전달하려면 저장된 정리를 받거나 복사하세요.';
         touch();
-      } catch (err) { if (S.projectId === projectId) { S.summaryMsg = /** @type {Error} */ (err).message; render(); } }
+      } catch (err) { if (S.projectId === projectId) { S.knowledgeBackupMsg = /** @type {Error} */ (err).message; render(); } }
     }
     else if (a === 'summary-mode') { S.summaryMode = t.value === 'text' ? 'text' : 'attachments'; S.summaryPrompt = ''; S.summaryMsg = '방식을 바꿨어요. 프롬프트를 다시 만드세요.'; render(); }
     else if (a === 'summary-request') { S.summaryRequest = t.value; if (isWorkspaceLayout()) scheduleSave(); }
