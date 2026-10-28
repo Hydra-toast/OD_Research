@@ -27,6 +27,7 @@ test('같은 AI 대화를 우선 안내하고 온닷에 저장한 정리는 선�
   });
   await page.locator('[data-fk="summary-detail-make"]').click();
   await expect.poll(() => page.evaluate(async () => (await import('/src/state/store.js')).S.summaryPrompt)).toContain('후속 대화 활용 지침');
+  await page.locator('[data-pact="quick-import"]').click();
   await page.locator('[data-fk="summary-import-md"]').fill('### 가상 예시 · 실제 논문 아님\n\n누적할 상세 설명 [P1]');
   await page.locator('[data-import-purpose="detail"]').click();
   await expect(page.getByText('같은 AI 대화', { exact: true })).toBeVisible();
@@ -184,12 +185,12 @@ test('Gemini가 고른 논문만 선택하고 상세 정리는 외부 프롬프�
   let sent;
   await page.route('**/api/research/gemini-shortlist', r => {
     sent = r.request().postDataJSON();
-    return r.fulfill({ json: { overview: '가상 연구군 설명', recommendations: [{ number: 2, reason: '가상 추천 이유' }, { number: 1, reason: '가상 추천 이유' }] } });
+    return r.fulfill({ json: { overview: '가상 연구군 설명', recommendations: [2, 1, 3].map(number => ({ number, reason: '가상 추천 이유' })) } });
   });
   await searchFixture(page);
   await page.evaluate(async () => { const { S } = await import('/src/state/store.js'); const { render } = await import('/src/controller/render.js'); S.selPapers = S.papers.slice(0, 3).map(p => p.id); S.pTask = 'cluster'; render(); });
   await page.locator('[data-ract="gemini-shortlist"]').click();
-  await expect.poll(() => page.evaluate(async () => (await import('/src/state/store.js')).S.selPapers)).toEqual([papers[1].id, papers[0].id]);
+  await expect.poll(() => page.evaluate(async () => (await import('/src/state/store.js')).S.selPapers)).toEqual([papers[1].id, papers[0].id, papers[2].id]);
   expect(sent.papers).toHaveLength(3);
   expect(Object.keys(sent.papers[0]).sort()).toEqual(['abstract', 'title']);
   await expect(page.locator('#bulk-h')).toBeVisible();
@@ -199,10 +200,33 @@ test('Gemini가 고른 논문만 선택하고 상세 정리는 외부 프롬프�
 test('Gemini 오류 시 기존 선택을 유지한다', async ({ page }) => {
   await page.route('**/api/research/gemini-shortlist', r => r.fulfill({ status: 429, json: { error: { message: 'Gemini 사용 한도에 도달했어요.' } } }));
   await searchFixture(page);
-  await page.evaluate(async () => { const { S } = await import('/src/state/store.js'); const { render } = await import('/src/controller/render.js'); S.selPapers = S.papers.slice(0, 2).map(p => p.id); S.pTask = 'cluster'; render(); });
+  await page.evaluate(async () => { const { S } = await import('/src/state/store.js'); const { render } = await import('/src/controller/render.js'); S.selPapers = S.papers.slice(0, 3).map(p => p.id); S.pTask = 'cluster'; render(); });
   await page.locator('[data-ract="gemini-shortlist"]').click();
   await expect(page.locator('.pw-summary-status')).toContainText('사용 한도');
-  expect(await page.evaluate(async () => (await import('/src/state/store.js')).S.selPapers)).toEqual([papers[0].id, papers[1].id]);
+  expect(await page.evaluate(async () => (await import('/src/state/store.js')).S.selPapers)).toEqual([papers[0].id, papers[1].id, papers[2].id]);
+});
+
+for (const width of [1440, 375]) test(`Gemini 추천 후 ${width}px 화면에서 2단계로 이동한다`, async ({ page }) => {
+  await page.setViewportSize({ width, height: 800 });
+  await page.route('**/api/research/gemini-shortlist', async r => {
+    await new Promise(resolve => setTimeout(resolve, 200));
+    return r.fulfill({ json: { overview: '가상 설명', recommendations: [2, 1, 3].map(number => ({ number, reason: '가상 이유' })) } });
+  });
+  await searchFixture(page);
+  if (width === 375) await page.locator('#pmob-work').click();
+  await expect(page.locator('#sm-import-details')).not.toHaveAttribute('open', '');
+  await expect(page.locator('#sm-latest-h')).toHaveCount(0);
+  await page.locator('#sm-import-h').click();
+  await expect(page.locator('#sm-import-details')).toHaveAttribute('open', '');
+  await page.locator('[data-ract="gemini-shortlist"]').click();
+  await expect(page.locator('#sm-import-details')).not.toHaveAttribute('open', '');
+  await expect.poll(() => page.evaluate(async () => (await import('/src/state/store.js')).S.selPapers.length)).toBe(3);
+  await expect.poll(() => page.evaluate(() => {
+    const target = document.querySelector('#bulk-h').getBoundingClientRect();
+    const pane = document.querySelector('#ppanel-work').getBoundingClientRect();
+    return target.top >= pane.top && target.top < pane.bottom - 50;
+  })).toBe(true);
+  await expect(page.locator('#sm-latest-h')).toHaveCount(0);
 });
 
 async function startSingleBulk(page) {
@@ -223,6 +247,7 @@ test('새 조사는 저장 대기 변경을 보존하고 저장 실패 시 화�
   });
   const newButton = page.locator('[data-fk="p-new-research"]');
   await expect(newButton).toHaveText('새 조사');
+  await page.locator('[data-pact="quick-import"]').click();
   await page.locator('[data-fk="summary-import-md"]').fill('가상 예시 · 저장 대기 중인 입력 [P1]');
   await page.evaluate(() => { window.__rl.failNextSave = true; });
   await newButton.click();
@@ -247,6 +272,7 @@ test('저장 대기 중 새로고침해도 조사와 입력 중인 내용을 다
     const { flushSave } = await import('/src/controller/persist.js');
     await flushSave(); window.__rl.saveDelayMs = 60000; return S.projectId;
   });
+  await page.locator('[data-pact="quick-import"]').click();
   await page.locator('[data-fk="summary-import-md"]').fill('가상 예시 · 작성 중인 AI 결과 [P1]');
   await page.reload();
   await expect(page.locator('#workspace')).toBeVisible();
@@ -263,13 +289,15 @@ test('저장 대기 중 새로고침해도 조사와 입력 중인 내용을 다
 test('정리 기록에서 이전 결과의 종류를 구분하고 최신 결과가 추천이어도 편집한다', async ({ page }) => {
   await searchFixture(page);
   await page.locator('[data-fk="summary-detail-make"]').click();
+  await page.locator('[data-pact="quick-import"]').click();
   await page.locator('[data-fk="summary-import-md"]').fill('# 가상 상세 정리\n\n근거 [P1]');
   await page.locator('[data-import-purpose="detail"]').click();
   await page.locator('[data-fk="summary-make"]').click();
   await page.locator('[data-pact="quick-import"]').click();
   await page.locator('[data-fk="summary-import-md"]').fill('1. [P1] 가상 예시 · 실제 논문 아님\n\n선택 논문: [P1]');
   await page.locator('[data-import-purpose="shortlist"]').click();
-  await page.locator('[data-pact="open-settings-tab"][data-tab="versions"]').first().click();
+  await page.locator('#nav-settings').click();
+  await page.locator('[data-pact="settings-tab"][data-tab="versions"]').click();
   await expect(page.getByText('상세 정리', { exact: true })).toBeVisible();
   await expect(page.getByText('1단계 추천', { exact: true })).toBeVisible();
   await expect(page.getByText('이 조사에서 저장한 정리 (2개)')).toBeVisible();
@@ -292,8 +320,8 @@ test('초록 기반 정리와 결과 확인을 원문 받기보다 먼저 안내
     if (width === 375) await page.locator('#pmob-work').click();
     const order = await page.locator('.pw-quick-bar [data-pact]').evaluateAll(els => els.map(e => e.dataset.pact));
     expect(order).toEqual(['quick-prompt', 'quick-import', 'quick-fulltext']);
-    expect(await page.locator('#sm-h').evaluate(el => el.compareDocumentPosition(document.querySelector('#sm-latest-h')) & Node.DOCUMENT_POSITION_FOLLOWING)).toBeTruthy();
-    expect(await page.locator('#sm-latest-h').evaluate(el => el.compareDocumentPosition(document.querySelector('#bulk-h')) & Node.DOCUMENT_POSITION_FOLLOWING)).toBeTruthy();
+    expect(await page.locator('#sm-h').evaluate(el => el.compareDocumentPosition(document.querySelector('#bulk-h')) & Node.DOCUMENT_POSITION_FOLLOWING)).toBeTruthy();
+    await expect(page.locator('#sm-latest-h')).toHaveCount(0);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   }
   // 기본 PDF 첨부와 1단계 초록 전달은 서로 독립적이다.

@@ -7,6 +7,7 @@ import { createDisabledAuth, createSupabaseAuth } from './auth.js';
 import { createSupabaseProjects } from './projects.js';
 import { createLiveSearch } from '../src/providers/live.js';
 import { createGeminiShortlist } from './gemini-shortlist.js';
+import { createGeminiQueries } from './gemini-queries.js';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -20,6 +21,7 @@ export async function start(port) {
   const app = createApp({
     auth, projects, search, root,
     geminiShortlist: process.env.GEMINI_API_KEY?.trim() ? createGeminiShortlist({ apiKey: process.env.GEMINI_API_KEY.trim() }) : null,
+    geminiQueries: process.env.GEMINI_API_KEY?.trim() ? createGeminiQueries({ apiKey: process.env.GEMINI_API_KEY.trim() }) : null,
     openalexContent: { apiKey: config.openalexKey },
     fulltext: { mailto: config.mailto },
     config: { authEnabled: config.authEnabled, searchEnabled: config.searchEnabled },

@@ -417,12 +417,14 @@ export function workspaceClusterHtml(S) {
         <textarea id="summary-focus" data-ract="summary-request" data-fk="summary-focus" rows="2" placeholder="비워 두어도 기본 연구군·입문 읽기 순서 지시를 만듭니다. 예: 공정 변수와 결함 관계를 다룬 방법 위주로 처음 읽을 2~3편과 이유">${h(S.summaryRequest || '')}</textarea>
       </div>
 
-      <p class="hint">선택한 논문의 제목·초록과 조사 주제·정리 초점이 Gemini에 전송됩니다. PDF는 전송하지 않습니다. 무료 등급의 입력은 Google 제품 개선에 사용될 수 있습니다.</p>
+      <p class="hint">추천 대상 논문의 제목·초록과 조사 주제·정리 초점이 Gemini에 전송됩니다. PDF는 전송하지 않습니다. 무료 등급의 입력은 Google 제품 개선에 사용될 수 있습니다.</p>
 
       <div class="row">
         <button class="btn primary" type="button" data-ract="gemini-shortlist" ${sel && !S.shortlistBusy ? '' : 'disabled'}>${S.shortlistBusy ? '추천 논문을 고르는 중…' : 'Gemini로 추천 논문 고르기'}</button>
+        ${matchedItems(S).length > 30 ? `<button class="btn" type="button" data-ract="gemini-shortlist-all" ${S.shortlistBusy ? 'disabled' : ''}>검색된 논문 ${Math.min(matchedItems(S).length, 100)}편에서 추천</button>` : ''}
         <button class="btn" type="button" data-ract="summary-make" data-fk="summary-make" ${sel ? '' : 'disabled'}>${sel}편으로 정리 프롬프트 복사</button>
       </div>
+      <p role="status" aria-live="polite" class="pw-summary-status">${h(S.summaryMsg || (sel ? '' : '왼쪽 논문 목록에서 추천할 논문을 선택해 주세요.'))}</p>
 
       <details class="pw-subdetails" ${S.pPromptPreviewOpen || S.summaryPrompt ? 'open' : ''} data-pact-details="prompt-preview">
         <summary>전달 방식과 미리보기</summary>
@@ -435,7 +437,7 @@ export function workspaceClusterHtml(S) {
         </div>
       </details>
 
-      <details class="pw-subdetails" id="sm-import-details" ${!latest || S.pSummaryImportOpen || importDraft.trim() ? 'open' : ''} data-pact-details="summary-import">
+      <details class="pw-subdetails" id="sm-import-details" ${S.pSummaryImportOpen ? 'open' : ''} data-pact-details="summary-import">
         <summary id="sm-import-h" tabindex="-1">결과 가져오기 (.md 파일 또는 붙여넣기)</summary>
         <form data-rform="summary-import" class="stack">
           <p class="hint">1단계 결과는 추천 논문만 자동 선택하고 원문 확보로 이동합니다. AI 답변 전체 또는 ‘선택 논문: [P번호], [P번호]’ 줄을 붙여 넣으세요.</p>
@@ -444,15 +446,8 @@ export function workspaceClusterHtml(S) {
           <div class="row"><button class="btn primary" type="submit" data-import-purpose="shortlist">추천 논문 선택하고 다음 단계로</button><button class="btn" type="submit" data-import-purpose="detail">선택 변경 없이 상세 정리본만 저장</button></div>
         </form>
       </details>
-      <p role="status" class="pw-summary-status">${h(S.summaryMsg || '')}</p>
     </section>
 
-    ${latest ? workspaceLatestSummaryCard(S, latest, ver.length) : `<section class="card stack" aria-labelledby="sm-latest-h">
-      <div class="pw-section-head">
-        <h2 id="sm-latest-h" style="font-size:1.125rem" tabindex="-1">최신 정리본</h2>
-      </div>
-      <p class="hint">아직 저장된 정리본이 없어요. 결과를 가져오면 여기에 최신 연구군 표와 입문 읽기 순서가 바로 표시됩니다. (실제 결과를 가져오기 전에는 임의의 예시 연구군을 만들지 않습니다.)</p>
-    </section>`}
     <section class="card stack">
       <div class="pw-scope-box stack" id="bulk-h" tabindex="-1" aria-label="추천 논문 원문 확보 및 PDF 등록">
         <h2 style="font-size:1.125rem">2단계 · 추천 논문 원문 확보 및 PDF 등록</h2>
@@ -516,6 +511,7 @@ export function workspaceClusterHtml(S) {
       </details>
 
     </section>
+    ${latest && (latest.promptVersion !== SHORTLIST_PROMPT_VERSION || S.pSummaryViewMode === 'edit') ? workspaceLatestSummaryCard(S, latest, ver.length) : ''}
   </div>`;
 }
 

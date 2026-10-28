@@ -6,9 +6,12 @@ import { runtime } from './runtime.js';
 import { consultPrompt } from '../research/brief.js';
 import { parseConsult } from '../research/import.js';
 import { h } from '../views/common.js';
+import { S } from '../state/store.js';
 
 /** @type {any} */
 let importedBrief = null;
+let importedContext = /** @type {any} */ (null);
+let queryRequest = 0;
 
 function contextOf() {
   return { speech: $('#brief').value.trim(), field: $('#brief-field')?.value?.trim() || '', conditions: $('#brief-conditions')?.value?.trim() || '' };
@@ -59,6 +62,9 @@ export function initLanding() {
   });
   $('#brief-form').addEventListener('submit', (/** @type {Event} */ e) => {
     e.preventDefault();
+    queryRequest++;
+    const aiStatus = $('#brief-ai-status');
+    if (aiStatus) { aiStatus.hidden = true; aiStatus.textContent = ''; }
     const v = $('#brief').value.trim(), err = $('#brief-error');
     if (!v) { err.textContent = '알아보고 싶은 내용을 적어 주세요.'; err.hidden = false; $('#brief').focus(); return; }
     err.hidden = true;
@@ -78,6 +84,28 @@ export function initLanding() {
     const speech = $('#brief').value.trim();
     if (!speech) { $('#brief-error').textContent = '알아보고 싶은 내용을 적어 주세요.'; $('#brief-error').hidden = false; $('#brief').focus(); return; }
     $('#brief-error').hidden = true;
+    if (t.dataset.brief === 'gemini-queries') {
+      if (t.disabled) return;
+      const ctx = contextOf(), current = ++queryRequest, projectId = S.projectId, revision = S.inputRevision;
+      const status = $('#brief-ai-status');
+      t.disabled = true; status.hidden = false; status.textContent = 'Gemini가 검색어를 만들고 있어요.';
+      try {
+        const response = await fetch('/api/research/gemini-queries', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(ctx) });
+        const body = await response.json().catch(() => ({}));
+        if (current !== queryRequest || S.projectId !== projectId || S.inputRevision !== revision) return;
+        if (JSON.stringify(contextOf()) !== JSON.stringify(ctx)) throw new Error('입력 내용이 바뀌었어요. AI 검색어 생성을 다시 눌러 주세요.');
+        if (!response.ok) throw new Error(body.error?.message || 'AI 검색어를 만들지 못했어요.');
+        const parsed = parseConsult(JSON.stringify(body.brief), ctx.speech);
+        if (!parsed.ok || !parsed.brief || parsed.brief.queries.length < 5 || parsed.needsConfirm.length) throw new Error('생성된 검색어를 확인하지 못했어요. 다시 시도해 주세요.');
+        importedBrief = { ...parsed.brief, source: 'gemini-api', speech: ctx.speech };
+        importedContext = ctx;
+        box.innerHTML = queryEditor({ ...importedBrief, needsConfirm: [], warnings: parsed.warnings });
+        box.hidden = false;
+      } catch (error) {
+        if (current === queryRequest && S.projectId === projectId && S.inputRevision === revision) { $('#brief-error').textContent = /** @type {Error} */ (error).message || 'AI 검색어를 만들지 못했어요.'; $('#brief-error').hidden = false; }
+      } finally { t.disabled = false; if (current === queryRequest) { status.hidden = true; status.textContent = ''; } }
+      return;
+    }
     if (t.dataset.brief === 'open-plan') {
       if (!box.hidden) { box.hidden = true; return; }
       showPlan();
@@ -109,6 +137,7 @@ export function initLanding() {
         return;
       }
       importedBrief = { ...parsed.brief, needsConfirm: parsed.needsConfirm, speech: $('#brief').value };
+      importedContext = null;
       $('#brief-plan').innerHTML = queryEditor({ ...parsed.brief, needsConfirm: parsed.needsConfirm, warnings: parsed.warnings });
     }
     if (form?.dataset?.briefForm === 'manual') {
@@ -127,9 +156,10 @@ export function initLanding() {
       const extra = form.querySelector('[data-query-add]')?.value?.trim();
       if (extra) picked.push(extra);
       const speech = $('#brief').value.trim();
+      if (importedContext && JSON.stringify(contextOf()) !== JSON.stringify(importedContext)) { setFormStatus(form, '입력 내용이 바뀌었어요. AI 검색어를 다시 생성해 주세요.'); return; }
       const box = $('#brief-plan');
       if (box) box.hidden = true;
-      await searchMany(picked, importedBrief?.selectedTopic?.name || speech, importedBrief || { speech, searchCriteria: {} });
+      await searchMany(picked, speech, importedBrief || { speech, searchCriteria: {} });
     }
   });
   $('#try-example')?.addEventListener('click', () => { $('#brief-error').hidden = true; searchExample('euv'); });

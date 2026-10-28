@@ -46,9 +46,11 @@
           <p class="error" id="brief-error" role="alert" hidden></p>
           <div class="row">
             <button type="submit" class="btn primary">찾기</button>
-            <button type="button" class="btn" id="brief-consult-toggle" data-brief="open-plan">상담·검색 문구 작성 (선택)</button>
+            <button type="button" class="btn" id="brief-consult-toggle" data-brief="gemini-queries">AI 검색어 생성</button>
             <button type="button" class="btn" id="brief-cancel" data-pact="search-edit-cancel" hidden>취소</button>
           </div>
+          <p class="hint">AI 검색어 생성 시 입력 내용과 추가 정보가 Gemini에 전송됩니다. 무료 등급의 입력은 Google 제품 개선에 사용될 수 있습니다.</p>
+          <p id="brief-ai-status" role="status" class="hint" hidden></p>
         </form>
         <section id="brief-plan" class="card stack" hidden></section>
       </div>
