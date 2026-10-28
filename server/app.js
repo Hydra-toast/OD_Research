@@ -17,7 +17,7 @@ const AUTH_MSG = {
   auth_not_configured: '계정 연결이 설정되지 않았어요. 예시 모드만 사용할 수 있어요.',
 };
 
-/** @param {{ auth: any, projects: any, search?: any, openai?: any, geminiShortlist?: any, geminiQueries?: any, completeAi?: any, fulltext?: any, inbox?: any, openalexContent?: any, schedule?: boolean, config: { authEnabled: boolean, searchEnabled?: boolean }, root: string }} deps */
+/** @param {{ auth: any, projects: any, search?: any, openai?: any, geminiShortlist?: any, geminiQueries?: any, geminiPublicEnabled?: boolean, completeAi?: any, fulltext?: any, inbox?: any, openalexContent?: any, schedule?: boolean, config: { authEnabled: boolean, searchEnabled?: boolean }, root: string }} deps */
 export function createApp(deps) {
   const app = express();
   app.disable('x-powered-by');

@@ -18,27 +18,32 @@ export function mountProduct(app, deps) {
   const budget = deps.budget ?? createBudget();
   const jobs = deps.jobs ?? createJobStore();
   const files = deps.files ?? createFileStore();
+  const geminiUnavailable = (/** @type {any} */ req) => new HttpError(503, 'gemini_unavailable', /^(localhost|127\.0\.0\.1)$/i.test(req.hostname || '') ? 'Gemini API가 연결되지 않았어요. 로컬 서버의 API 키 설정을 확인해 주세요.' : '공개 사이트에서 Gemini 연결 설정이 필요해요.');
   const paidOff = (_req, _res, next) => next(new HttpError(403, 'paid_ai_disabled', '이 흐름에서는 유료 AI API를 호출하지 않아요. 개인 AI 결과를 붙여 넣거나 검색 문구를 직접 쓰세요.'));
   app.post('/api/research/interpret', paidOff);
   app.post('/api/research/queries', paidOff);
   app.post('/api/research/gemini-queries', async (req, res, next) => {
     try {
-      if (!deps.geminiQueries) throw new HttpError(503, 'gemini_unavailable', 'Gemini API가 연결되지 않았어요. 로컬 서버의 API 키 설정을 확인해 주세요.');
-      const host = String(req.get('host') || '');
-      if (!/^(localhost|127\.0\.0\.1)(:\d+)?$/i.test(host)) throw new HttpError(403, 'local_only', '이 기능은 로컬 서버에서만 사용할 수 있어요.');
-      const origin = req.get('origin');
-      if (origin && origin !== `http://${host}`) throw new HttpError(403, 'origin_denied', '같은 사이트에서 요청해 주세요.');
+      if (!deps.geminiQueries) throw geminiUnavailable(req);
+      if (!deps.geminiPublicEnabled) {
+        const host = String(req.get('host') || '');
+        if (!/^(localhost|127\.0\.0\.1)(:\d+)?$/i.test(host)) throw new HttpError(403, 'local_only', '이 기능은 로컬 서버에서만 사용할 수 있어요.');
+        const origin = req.get('origin');
+        if (origin && origin !== `http://${host}`) throw new HttpError(403, 'origin_denied', '같은 사이트에서 요청해 주세요.');
+      }
       const input = queryInput(req.body);
       res.json({ brief: queryResult(await deps.geminiQueries(input), input) });
     } catch (error) { next(error); }
   });
   app.post('/api/research/gemini-shortlist', async (req, res, next) => {
     try {
-      if (!deps.geminiShortlist) throw new HttpError(503, 'gemini_unavailable', 'Gemini API가 연결되지 않았어요. 로컬 서버의 API 키 설정을 확인해 주세요.');
-      const host = String(req.get('host') || '');
-      if (!/^(localhost|127\.0\.0\.1)(:\d+)?$/i.test(host)) throw new HttpError(403, 'local_only', '이 기능은 로컬 서버에서만 사용할 수 있어요.');
-      const origin = req.get('origin');
-      if (origin && origin !== `http://${host}`) throw new HttpError(403, 'origin_denied', '같은 사이트에서 요청해 주세요.');
+      if (!deps.geminiShortlist) throw geminiUnavailable(req);
+      if (!deps.geminiPublicEnabled) {
+        const host = String(req.get('host') || '');
+        if (!/^(localhost|127\.0\.0\.1)(:\d+)?$/i.test(host)) throw new HttpError(403, 'local_only', '이 기능은 로컬 서버에서만 사용할 수 있어요.');
+        const origin = req.get('origin');
+        if (origin && origin !== `http://${host}`) throw new HttpError(403, 'origin_denied', '같은 사이트에서 요청해 주세요.');
+      }
       const input = validateShortlistInput(req.body);
       const output = validateShortlistResult(await deps.geminiShortlist(input), input);
       res.json(output);
